@@ -13,12 +13,14 @@ import { Input } from '@/components/ui/input'
 
 type SignupFormProps = {
   onSubmit: (values: SignupFormValues) => void | Promise<void>
+  onTermsAgreementChange?: (agreed: boolean) => void
   initialName?: string
   initialEmail?: string
 }
 
 export default function SignupForm({
   onSubmit,
+  onTermsAgreementChange,
   initialName = '',
   initialEmail = '',
 }: SignupFormProps) {
@@ -32,6 +34,7 @@ export default function SignupForm({
   })
   const { errors, isSubmitting } = form.formState
   const agreedToTerms = form.watch('agreedToTerms')
+  const termsRegistration = form.register('agreedToTerms')
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
@@ -88,7 +91,11 @@ export default function SignupForm({
               aria-invalid={Boolean(errors.agreedToTerms)}
               aria-describedby={errors.agreedToTerms ? 'signup-terms-error' : undefined}
               className="mt-1 size-4 shrink-0 cursor-pointer appearance-auto rounded-sm border border-gray-400 accent-[rgb(224,53,70)]"
-              {...form.register('agreedToTerms')}
+              {...termsRegistration}
+              onChange={(event) => {
+                void termsRegistration.onChange(event)
+                onTermsAgreementChange?.(event.currentTarget.checked)
+              }}
             />
             <label
               htmlFor="signup-terms"

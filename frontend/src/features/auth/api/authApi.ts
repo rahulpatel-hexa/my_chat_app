@@ -34,6 +34,13 @@ export async function verifyEmailSignupOtp(payload: VerifyEmailOtpPayload) {
   return response.data
 }
 
+export async function signInWithGoogle(credential: string) {
+  const response = await apiClient.post<VerifyEmailOtpResponse>('/auth/google', {
+    credential,
+  })
+  return response.data
+}
+
 export function refreshAuthSession() {
   if (!refreshRequest) {
     refreshRequest = apiClient

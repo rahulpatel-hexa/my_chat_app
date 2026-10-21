@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { Types } from "mongoose";
+import { OAuth2Client } from "google-auth-library";
 import { env } from "../../config/env";
 import { User } from "../../models/User";
 import { Otp } from "../../models/Otp";
@@ -12,6 +13,7 @@ import { createSession, signAccessToken } from "../../services/token.service";
 const MAX_ATTEMPTS = 5;
 const MAX_RESENDS = 5;
 const RESEND_COOLDOWN_MS = 30 * 1000;
+const googleOAuthClient = new OAuth2Client();
 
 // 6 digit secure random OTP
 const generateOtp = (): string => crypto.randomInt(100000, 1000000).toString();
@@ -78,6 +80,75 @@ export const verifySignupOtp = async (
     const refreshToken = await createSession(user._id as Types.ObjectId, meta);
 
     return { user, accessToken, refreshToken };
+};
+
+export const signInWithGoogle = async (
+    credential: string,
+    meta: { userAgent?: string; ip?: string }
+) => {
+    const clientId = env.googleClientId;
+    if (!clientId) {
+        throw new ApiError(503, "Google sign-in is not configured on the server.");
+    }
+
+    let payload;
+    try {
+        const ticket = await googleOAuthClient.verifyIdToken({
+            idToken: credential,
+            audience: clientId,
+        });
+        payload = ticket.getPayload();
+    } catch {
+        throw new ApiError(401, "Google credential is invalid or expired.");
+    }
+
+    if (!payload?.sub || !payload.email || payload.email_verified !== true) {
+        throw new ApiError(401, "Google account must have a verified email address.");
+    }
+
+    const email = payload.email.trim().toLowerCase();
+    let user = await User.findOne({ googleId: payload.sub });
+    let isNewUser = false;
+
+    if (!user) {
+        user = await User.findOne({ email });
+
+        if (user) {
+            if (user.googleId && user.googleId !== payload.sub) {
+                throw new ApiError(409, "This email is linked to a different Google account.");
+            }
+
+            user.googleId = payload.sub;
+            user.isEmailVerified = true;
+            if (!user.authProviders.includes("google")) {
+                user.authProviders.push("google");
+            }
+            if (!user.avatarUrl && payload.picture) {
+                user.avatarUrl = payload.picture;
+            }
+            await user.save();
+        } else {
+            user = await User.create({
+                name: payload.name?.trim() || payload.given_name?.trim() || email.split("@")[0],
+                email,
+                googleId: payload.sub,
+                avatarUrl: payload.picture,
+                isEmailVerified: true,
+                authProviders: ["google"],
+                isProfileComplete: true,
+            });
+            isNewUser = true;
+        }
+    }
+
+    if (user.status !== "active") {
+        throw new ApiError(403, "Account is unavailable.");
+    }
+
+    const accessToken = signAccessToken(String(user._id));
+    const refreshToken = await createSession(user._id as Types.ObjectId, meta);
+
+    return { user, accessToken, refreshToken, isNewUser };
 };
 
 const deliverOtp = async (channel: "email" | "phone", identifier: string, otp: string) => {

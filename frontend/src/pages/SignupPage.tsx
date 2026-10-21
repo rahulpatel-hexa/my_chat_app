@@ -1,14 +1,14 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import axios from 'axios'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
-import { Button } from '@/components/ui/button'
-import GoogleIcon from '@/assets/google.png'
+import GoogleAuthButton from '@/features/auth/components/GoogleAuthButton'
 import SignupForm from '@/features/auth/components/SignupForm'
-import { requestEmailSignupOtp } from '@/features/auth/api/authApi'
+import { requestEmailSignupOtp, signInWithGoogle } from '@/features/auth/api/authApi'
 import type { SignupFormValues } from '@/features/auth/signupSchema'
+import { useAuthStore } from '@/features/auth/store/useAuthStore'
 import HomePage from '@/pages/HomePage'
 
 type SignupPageState = {
@@ -39,6 +39,8 @@ function getSignupErrorMessage(error: unknown) {
 export default function SignupPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const setAuth = useAuthStore((state) => state.setAuth)
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
   const previousSignup = (location.state as SignupPageState | null) ?? {}
   const signupMutation = useMutation({
     mutationFn: requestEmailSignupOtp,
@@ -69,11 +71,15 @@ export default function SignupPage() {
     })
   }
 
-  function handleGoogleSignUp() {
-    toast.info('Google sign-in is not available yet', {
-      description: 'Google authentication is not connected to a backend yet.',
-      duration: 5000,
-    })
+  async function handleGoogleSignUp(credential: string) {
+    try {
+      const session = await signInWithGoogle(credential)
+      setAuth(session.accessToken, session.user)
+      toast.success(session.isNewUser ? 'Account created with Google' : 'Signed in with Google')
+      navigate('/chats', { replace: true })
+    } catch (error) {
+      toast.error(getSignupErrorMessage(error))
+    }
   }
 
   return (
@@ -109,6 +115,7 @@ export default function SignupPage() {
 
           <SignupForm
             onSubmit={handleSignup}
+            onTermsAgreementChange={setAgreedToTerms}
             initialName={previousSignup.name}
             initialEmail={previousSignup.email}
           />
@@ -125,15 +132,13 @@ export default function SignupPage() {
             <span className="h-px flex-1 bg-gray-200" />
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleGoogleSignUp}
-            className="h-11 w-full rounded-md border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-          >
-            <img src={GoogleIcon} alt="" aria-hidden="true" className="size-5" />
-            Sign up with Google
-          </Button>
+          <GoogleAuthButton mode="signup" onCredential={handleGoogleSignUp} />
+          {/* {agreedToTerms ? (
+          ) : (
+            <p className="text-center text-sm text-gray-500">
+              Agree to the Terms of Service and Privacy Policy above to sign up with Google.
+            </p>
+          )} */}
 
           <p className="mt-5 border-t border-gray-200 pt-4 text-sm text-gray-500">
             Already have an account?{' '}

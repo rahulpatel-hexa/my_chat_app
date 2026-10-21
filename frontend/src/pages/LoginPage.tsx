@@ -1,15 +1,17 @@
 import { useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
+import GoogleAuthButton from '@/features/auth/components/GoogleAuthButton'
+import { signInWithGoogle } from '@/features/auth/api/authApi'
+import { useAuthStore } from '@/features/auth/store/useAuthStore'
 import LoginForm from '@/features/auth/components/LoginForm'
 import type { LoginFormValues } from '@/features/auth/loginSchema'
 import HomePage from '@/pages/HomePage'
-import GoogleIcon from '@/assets/google.png'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const setAuth = useAuthStore((state) => state.setAuth)
   const initialPhone = (location.state as { phone?: string } | null)?.phone
 
   useEffect(() => {
@@ -27,11 +29,28 @@ export default function LoginPage() {
     navigate('/verify-otp', { state: { phone: values.phone } })
   }
 
-  function handleGoogleSignIn() {
-    toast.info('Google sign-in is not available yet', {
-      description: 'Google authentication is not connected to a backend yet.',
-      duration: 5000,
-    })
+  async function handleGoogleSignIn(credential: string) {
+    try {
+      const session = await signInWithGoogle(credential)
+      setAuth(session.accessToken, session.user)
+      toast.success('Signed in with Google')
+      navigate('/chats', { replace: true })
+    } catch (error) {
+      const message =
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        typeof error.response === 'object' &&
+        error.response !== null &&
+        'data' in error.response &&
+        typeof error.response.data === 'object' &&
+        error.response.data !== null &&
+        'message' in error.response.data &&
+        typeof error.response.data.message === 'string'
+          ? error.response.data.message
+          : 'Unable to sign in with Google. Please try again.'
+      toast.error(message)
+    }
   }
 
   return (
@@ -75,20 +94,7 @@ export default function LoginPage() {
             <span className="h-px flex-1 bg-gray-200" />
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleGoogleSignIn}
-            className="h-11 w-full rounded-md border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-          >
-            <img
-              src={GoogleIcon}
-              alt=""
-              aria-hidden="true"
-              className="size-5"
-            />
-            Sign in with Google
-          </Button>
+          <GoogleAuthButton mode="signin" onCredential={handleGoogleSignIn} />
 
           <p className="border-t border-gray-200 pt-4 text-sm text-gray-500">
             New here?{' '}

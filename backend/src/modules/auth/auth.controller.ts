@@ -60,6 +60,31 @@ export const verifyEmailOtp =
 }
 // );
 
+export const googleSignIn = asyncHandler(async (req: Request, res: Response) => {
+    const { user, accessToken, refreshToken, isNewUser } = await authService.signInWithGoogle(
+        req.body.credential,
+        {
+            userAgent: req.headers["user-agent"],
+            ip: req.ip,
+        },
+    );
+
+    res.cookie("refreshToken", refreshToken, refreshCookieOptions);
+    res.json({
+        success: true,
+        accessToken,
+        isNewUser,
+        user: {
+            id: String(user._id),
+            name: user.name,
+            email: user.email ?? null,
+            phone: user.phone ?? null,
+            avatarUrl: user.avatarUrl ?? null,
+            about: user.about,
+        },
+    });
+});
+
 export const resendOtp = asyncHandler(async (req: Request, res: Response) => {
   const { identifier, purpose } = req.body;
   await authService.resendOtp(identifier, purpose);

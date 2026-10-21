@@ -23,6 +23,7 @@ export const env = {
   accessTokenExpires: process.env.ACCESS_TOKEN_EXPIRES ?? "15m",
   refreshTokenDays: Number(process.env.REFRESH_TOKEN_DAYS ?? 30),
   otpExpiresMin: Number(process.env.OTP_EXPIRES_MIN ?? 5),
+  googleClientId: process.env.GOOGLE_CLIENT_ID,
   smtp: {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT ?? 587),
@@ -31,5 +32,4 @@ export const env = {
     from: process.env.MAIL_FROM,
   },
 };
-
 

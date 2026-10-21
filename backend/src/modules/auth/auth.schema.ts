@@ -10,6 +10,10 @@ export const verifyEmailOtpSchema = z.object({
   otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
 });
 
+export const googleSignInSchema = z.object({
+  credential: z.string().trim().min(1, "Google credential is required").max(8192),
+});
+
 export const resendOtpSchema = z.object({
   identifier: z.string().trim().toLowerCase().min(3, "Identifier is required"),
   purpose: z.enum(["signup", "login", "add_phone"]),
