@@ -1,0 +1,2 @@
+npm i zod bcryptjs jsonwebtoken nodemailer cookie-parser express-rate-limit
+npm i -D @types/jsonwebtoken @types/nodemailer @types/cookie-parser
