@@ -5,6 +5,7 @@ import * as authService from "./auth.service";
 import { User } from "../../models/User";
 import { ApiError } from "../../utils/ApiError";
 import { revokeSession, rotateSession, signAccessToken } from "../../services/token.service";
+import { getPublicAvatarUrl } from "../../utils/avatarUrl";
 
 const refreshCookieOptions = {
     httpOnly: true,
@@ -53,7 +54,7 @@ export const verifyEmailOtp =
             name: user.name,
             email: user.email,
             phone: user.phone ?? null,
-            avatarUrl: user.avatarUrl ?? null,
+            avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
             about: user.about,
         },
     });
@@ -86,7 +87,7 @@ export const verifyPhoneLoginOtp = asyncHandler(async (req: Request, res: Respon
             name: user.name,
             email: user.email ?? null,
             phone: user.phone ?? null,
-            avatarUrl: user.avatarUrl ?? null,
+            avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
             about: user.about,
         },
     });
@@ -111,7 +112,7 @@ export const googleSignIn = asyncHandler(async (req: Request, res: Response) => 
             name: user.name,
             email: user.email ?? null,
             phone: user.phone ?? null,
-            avatarUrl: user.avatarUrl ?? null,
+            avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
             about: user.about,
         },
     });
@@ -155,7 +156,7 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
             name: user.name,
             email: user.email,
             phone: user.phone ?? null,
-            avatarUrl: user.avatarUrl ?? null,
+            avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
             about: user.about,
         },
     });

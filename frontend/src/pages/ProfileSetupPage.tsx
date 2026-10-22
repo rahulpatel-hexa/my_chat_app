@@ -4,7 +4,7 @@ import axios from 'axios'
 import { Camera, LoaderCircle } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 import apiClient from '@/lib/apiClient'
-import { useAuthStore } from '@/features/auth/store/useAuthStore'
+import { useAuthStore, type AuthUser } from '@/features/auth/store/useAuthStore'
 import HomePage from '@/pages/HomePage'
 
 type ProfileFields = {
@@ -19,9 +19,10 @@ async function updateProfile({ name, about, avatar }: ProfileFields) {
   formData.append('about', about)
   if (avatar) formData.append('avatar', avatar)
 
-  await apiClient.patch('/users/me', formData, {
+  const response = await apiClient.patch<{ user: AuthUser }>('/users/me', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
+  return response.data.user
 }
 
 function getApiErrorMessage(error: unknown) {
@@ -72,8 +73,8 @@ export default function ProfileSetupPage() {
 
   const mutation = useMutation({
     mutationFn: updateProfile,
-    onSuccess: (_, profile) => {
-      updateAuthUser({ name: profile.name, about: profile.about })
+    onSuccess: (user) => {
+      updateAuthUser(user)
       navigate('/chats', { replace: true })
     },
   })
@@ -93,8 +94,12 @@ export default function ProfileSetupPage() {
   function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0] ?? null
     event.currentTarget.value = ''
-    if (file && !file.type.startsWith('image/')) {
-      setAvatarError('Please select an image file.')
+    if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setAvatarError('Please select a JPEG, PNG, or WebP image.')
+      return
+    }
+    if (file && file.size > 5 * 1024 * 1024) {
+      setAvatarError('Profile photo must be 5 MB or smaller.')
       return
     }
     setAvatarError('')
@@ -161,7 +166,7 @@ export default function ProfileSetupPage() {
                 <input
                   id="profile-avatar"
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   onChange={handleAvatarChange}
                   className="sr-only"
                   aria-describedby={avatarError ? 'avatar-error' : undefined}
