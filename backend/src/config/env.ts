@@ -24,6 +24,11 @@ export const env = {
   refreshTokenDays: Number(process.env.REFRESH_TOKEN_DAYS ?? 30),
   otpExpiresMin: Number(process.env.OTP_EXPIRES_MIN ?? 5),
   googleClientId: process.env.GOOGLE_CLIENT_ID,
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    apiSecret: process.env.CLOUDINARY_API_SECRET,
+  },
   smtp: {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT ?? 587),
@@ -32,4 +37,3 @@ export const env = {
     from: process.env.MAIL_FROM,
   },
 };
-

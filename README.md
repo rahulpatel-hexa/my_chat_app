@@ -58,7 +58,15 @@ Example:
 ```env
 PORT=5000
 MONGODB_URI=your_mongodb_connection_string
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
 ```
+
+Create a Cloudinary account and copy these values from its dashboard. Keep the API
+secret only in `backend/.env`; never add real credentials to source control or
+frontend environment variables. Profile photos are uploaded to Cloudinary through
+the authenticated `PATCH /api/v1/users/me` endpoint.
 
 Start the backend development server:
 

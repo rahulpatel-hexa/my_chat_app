@@ -7,6 +7,7 @@ import { getPublicAvatarUrl } from "../../utils/avatarUrl";
 import { uploadsDirectory } from "../../middlewares/uploadAvatar";
 import { unlink } from "node:fs/promises";
 import path from "node:path";
+import { deleteCloudinaryAvatar, uploadAvatarToCloudinary } from "../../services/cloudinary.service";
 
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as AuthRequest).userId;
@@ -48,42 +49,56 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     const hasDescription = typeof req.body.description === "string";
     const description = hasDescription ? req.body.description.trim() : "";
     if (name.length < 2 || name.length > 50) {
-        await removeUploadedAvatar(req.file?.path);
         throw new ApiError(400, "Name must be between 2 and 50 characters.");
     }
     if (about.length > 140) {
-        await removeUploadedAvatar(req.file?.path);
         throw new ApiError(400, "About must be 140 characters or fewer.");
     }
     if (hasDescription && description.length > 500) {
-        await removeUploadedAvatar(req.file?.path);
         throw new ApiError(400, "Description must be 500 characters or fewer.");
     }
 
     const user = await User.findOne({ _id: userId, status: "active" });
     if (!user) {
-        await removeUploadedAvatar(req.file?.path);
         throw new ApiError(401, "Account is unavailable.");
     }
 
     const previousAvatarUrl = user.avatarUrl;
+    const previousAvatarPublicId = user.avatarPublicId;
+    let uploadedAvatar: Awaited<ReturnType<typeof uploadAvatarToCloudinary>> | undefined;
+    if (req.file) {
+        if (!req.file.buffer) {
+            throw new ApiError(400, "The uploaded profile photo is invalid.");
+        }
+        uploadedAvatar = await uploadAvatarToCloudinary(req.file.buffer, userId);
+    }
+
     user.name = name;
     user.about = about || "Hey there!";
     if (hasDescription) {
         user.description = description;
     }
-    if (req.file) {
-        user.avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    if (uploadedAvatar) {
+        user.avatarUrl = uploadedAvatar.secure_url;
+        user.avatarPublicId = uploadedAvatar.public_id;
     }
     user.isProfileComplete = true;
     try {
         await user.save();
     } catch (error) {
-        await removeUploadedAvatar(req.file?.path);
+        if (uploadedAvatar) {
+            await deleteCloudinaryAvatar(uploadedAvatar.public_id).catch((cleanupError: unknown) => {
+                console.error("Unable to clean up an unsaved Cloudinary avatar:", cleanupError);
+            });
+        }
         throw error;
     }
 
-    if (req.file && previousAvatarUrl?.startsWith("/uploads/avatars/")) {
+    if (uploadedAvatar && previousAvatarPublicId) {
+        await deleteCloudinaryAvatar(previousAvatarPublicId).catch((error: unknown) => {
+            console.error("Unable to delete replaced Cloudinary avatar:", error);
+        });
+    } else if (uploadedAvatar && previousAvatarUrl?.startsWith("/uploads/avatars/")) {
         const previousAvatarPath = path.resolve(uploadsDirectory, previousAvatarUrl.slice("/uploads/".length));
         if (previousAvatarPath.startsWith(`${uploadsDirectory}${path.sep}`)) {
             await unlink(previousAvatarPath).catch((error: NodeJS.ErrnoException) => {
@@ -105,10 +120,3 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
         },
     });
 });
-
-const removeUploadedAvatar = async (filePath?: string) => {
-    if (!filePath) return;
-    await unlink(filePath).catch((error: NodeJS.ErrnoException) => {
-        if (error.code !== "ENOENT") throw error;
-    });
-};

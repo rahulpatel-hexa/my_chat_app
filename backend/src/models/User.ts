@@ -7,6 +7,7 @@ const userSchema = new Schema(
         phone: { type: String, unique: true, sparse: true },
         googleId: { type: String, unique: true, sparse: true },
         avatarUrl: String,
+        avatarPublicId: String,
         about: { type: String, default: "Hey there!" },
         description: { type: String, default: "", maxlength: 500 },
         isEmailVerified: { type: Boolean, default: false },

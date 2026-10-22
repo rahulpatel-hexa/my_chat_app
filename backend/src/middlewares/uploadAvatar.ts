@@ -1,5 +1,4 @@
 import { mkdirSync } from "node:fs";
-import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { NextFunction, Request, Response } from "express";
 import multer from "multer";
@@ -16,12 +15,7 @@ const extensionByMimeType: Record<string, string> = {
 };
 
 const upload = multer({
-    storage: multer.diskStorage({
-        destination: path.join(uploadsDirectory, "avatars"),
-        filename: (_req, file, callback) => {
-            callback(null, `${randomUUID()}${extensionByMimeType[file.mimetype] ?? ""}`);
-        },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024, files: 1 },
     fileFilter: (_req, file, callback) => {
         if (!extensionByMimeType[file.mimetype]) {
