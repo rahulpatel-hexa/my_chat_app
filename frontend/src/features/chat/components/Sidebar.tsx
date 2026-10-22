@@ -103,7 +103,7 @@ export default function Sidebar({
                 className="absolute right-0 top-11 z-20 w-44 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg"
               >
                 <Link
-                  to="/profile-setup"
+                  to="/profile"
                   role="menuitem"
                   onClick={() => setMenuOpen(false)}
                   className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50"

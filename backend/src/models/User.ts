@@ -8,6 +8,7 @@ const userSchema = new Schema(
         googleId: { type: String, unique: true, sparse: true },
         avatarUrl: String,
         about: { type: String, default: "Hey there!" },
+        description: { type: String, default: "", maxlength: 500 },
         isEmailVerified: { type: Boolean, default: false },
         isPhoneVerified: { type: Boolean, default: false },
         authProviders: [{ type: String, enum: ["phone", "email", "google"] }],

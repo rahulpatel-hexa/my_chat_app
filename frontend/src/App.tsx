@@ -10,6 +10,7 @@ import PrivacyPage from '@/pages/PrivacyPage'
 import LoginPage from '@/pages/LoginPage'
 import OtpVerificationPage from '@/pages/OtpVerificationPage'
 import ProfileSetupPage from '@/pages/ProfileSetupPage'
+import ProfilePage from '@/pages/ProfilePage'
 import SignupPage from '@/pages/SignupPage'
 import TermsPage from '@/pages/TermsPage'
 import NotFound from './NotFound'
@@ -91,6 +92,7 @@ export default function App() {
       <Route path="/verify-otp" element={<OtpVerificationPage />} />
       
       <Route element={<ProtectedRoute />}>
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile-setup" element={<ProfileSetupPage />} />
         <Route path="/add-phone" element={<AddPhoneRoute />} />
         <Route path="/chats" element={<ChatsPage />} />

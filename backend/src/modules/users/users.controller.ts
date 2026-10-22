@@ -16,7 +16,7 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
     }
 
     const user = await User.findOne({ _id: userId, status: "active" })
-        .select("name email phone avatarUrl about")
+        .select("name email phone avatarUrl about description")
         .exec();
 
     if (!user) {
@@ -32,6 +32,7 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
             phone: user.phone ?? null,
             avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
             about: user.about,
+            description: user.description ?? "",
         },
     });
 });
@@ -44,6 +45,8 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
 
     const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
     const about = typeof req.body.about === "string" ? req.body.about.trim() : "";
+    const hasDescription = typeof req.body.description === "string";
+    const description = hasDescription ? req.body.description.trim() : "";
     if (name.length < 2 || name.length > 50) {
         await removeUploadedAvatar(req.file?.path);
         throw new ApiError(400, "Name must be between 2 and 50 characters.");
@@ -51,6 +54,10 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     if (about.length > 140) {
         await removeUploadedAvatar(req.file?.path);
         throw new ApiError(400, "About must be 140 characters or fewer.");
+    }
+    if (hasDescription && description.length > 500) {
+        await removeUploadedAvatar(req.file?.path);
+        throw new ApiError(400, "Description must be 500 characters or fewer.");
     }
 
     const user = await User.findOne({ _id: userId, status: "active" });
@@ -62,6 +69,9 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     const previousAvatarUrl = user.avatarUrl;
     user.name = name;
     user.about = about || "Hey there!";
+    if (hasDescription) {
+        user.description = description;
+    }
     if (req.file) {
         user.avatarUrl = `/uploads/avatars/${req.file.filename}`;
     }
@@ -91,6 +101,7 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
             phone: user.phone ?? null,
             avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
             about: user.about,
+            description: user.description ?? "",
         },
     });
 });

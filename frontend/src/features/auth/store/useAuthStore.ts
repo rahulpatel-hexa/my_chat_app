@@ -7,6 +7,7 @@ export type AuthUser = {
   phone: string | null
   avatarUrl: string | null
   about: string
+  description: string
 }
 
 type AuthStore = {

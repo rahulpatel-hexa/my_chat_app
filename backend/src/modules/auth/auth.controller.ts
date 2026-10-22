@@ -56,6 +56,7 @@ export const verifyEmailOtp =
             phone: user.phone ?? null,
             avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
             about: user.about,
+            description: user.description ?? "",
         },
     });
 }
@@ -89,6 +90,7 @@ export const verifyPhoneLoginOtp = asyncHandler(async (req: Request, res: Respon
             phone: user.phone ?? null,
             avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
             about: user.about,
+            description: user.description ?? "",
         },
     });
 });
@@ -114,6 +116,7 @@ export const googleSignIn = asyncHandler(async (req: Request, res: Response) => 
             phone: user.phone ?? null,
             avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
             about: user.about,
+            description: user.description ?? "",
         },
     });
 });
@@ -158,6 +161,7 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
             phone: user.phone ?? null,
             avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
             about: user.about,
+            description: user.description ?? "",
         },
     });
 });
