@@ -4,6 +4,7 @@ import { useAuthStore } from '@/features/auth/store/useAuthStore'
 export default function ProtectedRoute() {
   const sessionStatus = useAuthStore((state) => state.sessionStatus)
   const sessionError = useAuthStore((state) => state.sessionError)
+  const user = useAuthStore((state) => state.user)
   const location = useLocation()
 
   if (sessionStatus === 'loading') {
@@ -31,7 +32,17 @@ export default function ProtectedRoute() {
     )
   }
 
-  return sessionStatus === 'authenticated'
-    ? <Outlet />
-    : <Navigate to="/login" replace state={{ from: location }} />
+  if (sessionStatus !== 'authenticated') {
+    return <Navigate to="/login" replace state={{ from: location }} />
+  }
+
+  if (!user?.isPhoneVerified && location.pathname !== '/add-phone') {
+    return <Navigate to="/add-phone" replace state={{ from: location }} />
+  }
+
+  if (user?.isPhoneVerified && location.pathname === '/add-phone') {
+    return <Navigate to="/chats" replace />
+  }
+
+  return <Outlet />
 }

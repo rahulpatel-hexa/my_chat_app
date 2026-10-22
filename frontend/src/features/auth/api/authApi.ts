@@ -55,6 +55,18 @@ export async function verifyPhoneLoginOtp(payload: VerifyPhoneOtpPayload) {
   return response.data
 }
 
+export async function requestProfilePhoneOtp(phone: string) {
+  await apiClient.post('/users/me/phone/request-otp', { phone })
+}
+
+export async function verifyProfilePhoneOtp(phone: string, otp: string) {
+  const response = await apiClient.post<{ user: AuthUser }>('/users/me/phone/verify-otp', {
+    phone,
+    otp,
+  })
+  return response.data.user
+}
+
 export async function resendOtp(identifier: string, purpose: 'signup' | 'login' | 'add_phone') {
   await apiClient.post('/auth/resend-otp', { identifier, purpose })
 }

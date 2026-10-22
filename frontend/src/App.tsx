@@ -18,14 +18,7 @@ import ChatsPage from '@/features/chat/pages/ChatsPage'
 import HomePage from './pages/HomePage'
 
 function AddPhoneRoute() {
-  const navigate = useNavigate()
-
-  return (
-    <AddPhoneModal
-      onSkip={() => undefined}
-      onOtpSent={(phone) => navigate('/verify-otp', { state: { phone } })}
-    />
-  )
+  return <AddPhoneModal />
 }
 
 export default function App() {

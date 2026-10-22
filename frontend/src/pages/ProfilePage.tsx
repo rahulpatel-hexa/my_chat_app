@@ -122,6 +122,7 @@ export default function ProfilePage() {
   const [about, setAbout] = useState(authUser?.about ?? '')
   const [description, setDescription] = useState(authUser?.description ?? '')
   const [avatar, setAvatar] = useState<File | null>(null)
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null)
   const [avatarError, setAvatarError] = useState('')
   const [nameTouched, setNameTouched] = useState(false)
   const [emailOtpSentTo, setEmailOtpSentTo] = useState<string | null>(null)
@@ -139,6 +140,7 @@ export default function ProfilePage() {
     () => (avatar ? URL.createObjectURL(avatar) : null),
     [avatar],
   )
+  const profileAvatarUrl = avatarPreview ?? profile?.avatarUrl ?? undefined
 
   useEffect(() => {
     return () => {
@@ -374,11 +376,12 @@ export default function ProfilePage() {
                 <div className="relative px-5 pb-6 sm:px-8">
                   <div className="-mt-12 flex flex-wrap items-end justify-between gap-4 sm:-mt-14">
                     <div className="relative">
-                      {avatarPreview || profile.avatarUrl ? (
+                      {profileAvatarUrl && failedAvatarUrl !== profileAvatarUrl ? (
                         <img
-                          src={avatarPreview ?? profile.avatarUrl ?? undefined}
+                          src={profileAvatarUrl}
                           alt={`${profile.name}'s profile`}
                           className="size-24 rounded-2xl border-4 border-white bg-white object-cover shadow-md sm:size-28"
+                          onError={() => setFailedAvatarUrl(profileAvatarUrl)}
                         />
                       ) : (
                         <div className="grid size-24 place-items-center rounded-2xl border-4 border-white bg-rose-100 text-2xl font-semibold text-rose-700 shadow-md sm:size-28 sm:text-3xl">

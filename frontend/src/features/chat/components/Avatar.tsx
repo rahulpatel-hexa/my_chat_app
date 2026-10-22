@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 type AvatarProps = {
   name: string
   avatarUrl?: string
@@ -26,6 +28,7 @@ export default function Avatar({
   size = 'md',
   isOnline = false,
 }: AvatarProps) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const initials = name
     .trim()
     .split(/\s+/)
@@ -36,11 +39,12 @@ export default function Avatar({
 
   return (
     <span className="relative block shrink-0">
-      {avatarUrl ? (
+      {avatarUrl && failedUrl !== avatarUrl ? (
         <img
           src={avatarUrl}
           alt={`${name}'s avatar`}
           className={`${sizeClasses[size]} rounded-full object-cover`}
+          onError={() => setFailedUrl(avatarUrl)}
         />
       ) : (
         <span

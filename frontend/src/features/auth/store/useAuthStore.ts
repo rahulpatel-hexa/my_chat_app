@@ -5,6 +5,7 @@ export type AuthUser = {
   name: string
   email: string | null
   phone: string | null
+  isPhoneVerified: boolean
   avatarUrl: string | null
   about: string
   description: string
