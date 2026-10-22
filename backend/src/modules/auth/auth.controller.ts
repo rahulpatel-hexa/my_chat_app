@@ -60,6 +60,38 @@ export const verifyEmailOtp =
 }
 // );
 
+export const requestPhoneLoginOtp = asyncHandler(async (req: Request, res: Response) => {
+    const purpose = await authService.requestPhoneLoginOtp(req.body.phone);
+    res.json({ success: true, message: "OTP sent to your phone.", purpose });
+});
+
+export const verifyPhoneLoginOtp = asyncHandler(async (req: Request, res: Response) => {
+    const { user, accessToken, refreshToken, isNewUser } = await authService.verifyPhoneLoginOtp(
+        req.body.phone,
+        req.body.otp,
+        req.body.purpose,
+        {
+            userAgent: req.headers["user-agent"],
+            ip: req.ip,
+        },
+    );
+
+    res.cookie("refreshToken", refreshToken, refreshCookieOptions);
+    res.json({
+        success: true,
+        accessToken,
+        isNewUser,
+        user: {
+            id: String(user._id),
+            name: user.name,
+            email: user.email ?? null,
+            phone: user.phone ?? null,
+            avatarUrl: user.avatarUrl ?? null,
+            about: user.about,
+        },
+    });
+});
+
 export const googleSignIn = asyncHandler(async (req: Request, res: Response) => {
     const { user, accessToken, refreshToken, isNewUser } = await authService.signInWithGoogle(
         req.body.credential,

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import GoogleAuthButton from '@/features/auth/components/GoogleAuthButton'
-import { signInWithGoogle } from '@/features/auth/api/authApi'
+import { requestPhoneLoginOtp, signInWithGoogle } from '@/features/auth/api/authApi'
 import { useAuthStore } from '@/features/auth/store/useAuthStore'
 import LoginForm from '@/features/auth/components/LoginForm'
 import type { LoginFormValues } from '@/features/auth/loginSchema'
@@ -25,8 +25,28 @@ export default function LoginPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [navigate])
 
-  function handleLogin(values: LoginFormValues) {
-    navigate('/verify-otp', { state: { phone: values.phone } })
+  async function handleLogin(values: LoginFormValues) {
+    try {
+      const { purpose } = await requestPhoneLoginOtp(values.phone)
+      navigate('/verify-otp', {
+        state: { channel: 'phone', identifier: values.phone, purpose },
+      })
+    } catch (error) {
+      const message =
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        typeof error.response === 'object' &&
+        error.response !== null &&
+        'data' in error.response &&
+        typeof error.response.data === 'object' &&
+        error.response.data !== null &&
+        'message' in error.response.data &&
+        typeof error.response.data.message === 'string'
+          ? error.response.data.message
+          : 'Unable to send the login code. Please try again.'
+      toast.error(message)
+    }
   }
 
   async function handleGoogleSignIn(credential: string) {

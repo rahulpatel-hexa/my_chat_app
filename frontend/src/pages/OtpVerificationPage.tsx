@@ -9,7 +9,11 @@ import { useMutation } from '@tanstack/react-query'
 import axios from 'axios'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
-import { verifyEmailSignupOtp } from '@/features/auth/api/authApi'
+import {
+  resendOtp,
+  verifyEmailSignupOtp,
+  verifyPhoneLoginOtp,
+} from '@/features/auth/api/authApi'
 import { useAuthStore } from '@/features/auth/store/useAuthStore'
 import HomePage from '@/pages/HomePage'
 
@@ -18,6 +22,7 @@ type OtpPageState = {
   channel?: 'phone' | 'email'
   identifier?: string
   name?: string
+  purpose?: 'signup' | 'login' | 'add_phone'
 }
 
 const OTP_LENGTH = 6
@@ -56,15 +61,28 @@ export default function OtpVerificationPage() {
   const channel = otpState.channel ?? 'phone'
   const identifier = otpState.identifier ?? otpState.phone
   const name = otpState.name
+  const purpose = otpState.purpose ?? (channel === 'email' ? 'signup' : 'login')
   const setAuth = useAuthStore((state) => state.setAuth)
 
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''))
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS)
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
   const verifyMutation = useMutation({
-    mutationFn: verifyEmailSignupOtp,
+    mutationFn: ({ identifier: otpIdentifier, otp }: { identifier: string; otp: string }) => {
+      if (channel === 'email') {
+        return verifyEmailSignupOtp({ email: otpIdentifier, otp })
+      }
+      if (purpose === 'login' || purpose === 'signup') {
+        return verifyPhoneLoginOtp({ phone: otpIdentifier, otp, purpose })
+      }
+      throw new Error('Phone verification is not available in this flow.')
+    },
     onSuccess: (response) => {
       setAuth(response.accessToken, response.user)
+      if (channel === 'phone' && purpose === 'signup' && response.isNewUser) {
+        navigate('/profile-setup', { replace: true, state: { name: '' } })
+        return
+      }
       navigate('/chats', { replace: true })
     },
   })
@@ -98,16 +116,9 @@ export default function OtpVerificationPage() {
   }, [])
 
   function verify(code: string) {
-    if (channel !== 'email') {
-      toast.info('Phone OTP verification is not available yet', {
-        description: 'Phone authentication is not connected to a backend yet.',
-        duration: 5000,
-      })
-      return
-    }
     if (!identifier || verifyMutation.isPending) return
 
-    verifyMutation.mutate({ email: identifier, otp: code })
+    verifyMutation.mutate({ identifier, otp: code })
   }
 
   function handleChange(index: number, value: string) {
@@ -147,15 +158,17 @@ export default function OtpVerificationPage() {
     if (pasted.length === OTP_LENGTH) verify(pasted)
   }
 
-  function handleResend() {
-    if (secondsLeft > 0) return
-    setDigits(Array(OTP_LENGTH).fill(''))
-    setSecondsLeft(RESEND_SECONDS)
-    inputRefs.current[0]?.focus()
-    toast.info('Resend is not available yet', {
-      description: 'Phone authentication is not connected to a backend yet.',
-      duration: 5000,
-    })
+  async function handleResend() {
+    if (secondsLeft > 0 || !identifier) return
+    try {
+      await resendOtp(identifier, purpose)
+      setDigits(Array(OTP_LENGTH).fill(''))
+      setSecondsLeft(RESEND_SECONDS)
+      inputRefs.current[0]?.focus()
+      toast.success('A new OTP has been sent.')
+    } catch (error) {
+      toast.error(getOtpErrorMessage(error))
+    }
   }
 
   if (!identifier) return null

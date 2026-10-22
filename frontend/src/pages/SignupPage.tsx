@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import axios from 'axios'
 import { Link, useLocation, useNavigate } from 'react-router'
@@ -40,7 +40,6 @@ export default function SignupPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const setAuth = useAuthStore((state) => state.setAuth)
-  const [agreedToTerms, setAgreedToTerms] = useState(false)
   const previousSignup = (location.state as SignupPageState | null) ?? {}
   const signupMutation = useMutation({
     mutationFn: requestEmailSignupOtp,
@@ -115,7 +114,6 @@ export default function SignupPage() {
 
           <SignupForm
             onSubmit={handleSignup}
-            onTermsAgreementChange={setAgreedToTerms}
             initialName={previousSignup.name}
             initialEmail={previousSignup.email}
           />

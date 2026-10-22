@@ -3,7 +3,7 @@ import { create } from 'zustand'
 export type AuthUser = {
   id: string
   name: string
-  email: string
+  email: string | null
   phone: string | null
   avatarUrl: string | null
   about: string

@@ -7,6 +7,7 @@ import { User } from "../../models/User";
 import { Otp } from "../../models/Otp";
 import { ApiError } from "../../utils/ApiError";
 import { sendOtpEmail } from "../../services/email.service";
+import { sendOtpSms } from "../../services/sms.service";
 import { createSession, signAccessToken } from "../../services/token.service";
 
 
@@ -82,6 +83,97 @@ export const verifySignupOtp = async (
     return { user, accessToken, refreshToken };
 };
 
+export const requestPhoneLoginOtp = async (phone: string): Promise<"login" | "signup"> => {
+    const user = await User.findOne({ phone });
+    if (user?.status === "blocked") {
+        throw new ApiError(403, "Account is unavailable.");
+    }
+    const purpose = user ? "login" : "signup";
+
+    const existingOtp = await Otp.findOne({ identifier: phone, purpose });
+    if (existingOtp) {
+        const elapsed = Date.now() - existingOtp.lastSentAt.getTime();
+        if (elapsed < RESEND_COOLDOWN_MS) {
+            const wait = Math.ceil((RESEND_COOLDOWN_MS - elapsed) / 1000);
+            throw new ApiError(429, `Please wait ${wait} seconds before requesting another OTP.`);
+        }
+    }
+
+    const otp = generateOtp();
+    await Otp.findOneAndUpdate(
+        { identifier: phone, purpose },
+        {
+            channel: "phone",
+            otpHash: await bcrypt.hash(otp, 10),
+            attempts: 0,
+            resendCount: 0,
+            lastSentAt: new Date(),
+            expiresAt: new Date(Date.now() + env.otpExpiresMin * 60 * 1000),
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+
+    await sendOtpSms(phone, otp);
+    return purpose;
+};
+
+export const verifyPhoneLoginOtp = async (
+    phone: string,
+    otp: string,
+    purpose: "login" | "signup",
+    meta: { userAgent?: string; ip?: string },
+) => {
+    const record = await Otp.findOne({ identifier: phone, purpose, channel: "phone" });
+    if (!record || record.expiresAt.getTime() <= Date.now()) {
+        throw new ApiError(400, "OTP expired. Please request a new one.");
+    }
+    if (record.attempts >= MAX_ATTEMPTS) {
+        throw new ApiError(429, "Too many wrong attempts. Request a new OTP.");
+    }
+
+    const isValid = await bcrypt.compare(otp, record.otpHash);
+    if (!isValid) {
+        record.attempts += 1;
+        await record.save();
+        throw new ApiError(400, "Invalid OTP.");
+    }
+
+    let user = await User.findOne({ phone });
+    let isNewUser = false;
+    if (user?.status === "blocked") {
+        throw new ApiError(403, "Account is unavailable.");
+    }
+    if (!user && purpose === "signup") {
+        user = await User.create({
+            name: "New User",
+            phone,
+            isPhoneVerified: true,
+            authProviders: ["phone"],
+            isProfileComplete: false,
+        });
+        isNewUser = true;
+    }
+    if (!user) {
+        await record.deleteOne();
+        throw new ApiError(401, "Account is unavailable.");
+    }
+    if (!user.isPhoneVerified) {
+        user.isPhoneVerified = true;
+    }
+    if (!user.authProviders.includes("phone")) {
+        user.authProviders.push("phone");
+    }
+    if (user.isModified()) {
+        await user.save();
+    }
+
+    await record.deleteOne();
+    const accessToken = signAccessToken(String(user._id));
+    const refreshToken = await createSession(user._id as Types.ObjectId, meta);
+
+    return { user, accessToken, refreshToken, isNewUser };
+};
+
 export const signInWithGoogle = async (
     credential: string,
     meta: { userAgent?: string; ip?: string }
@@ -153,8 +245,7 @@ export const signInWithGoogle = async (
 
 const deliverOtp = async (channel: "email" | "phone", identifier: string, otp: string) => {
   if (channel === "email") return sendOtpEmail(identifier, otp);
-  // phone: sms.service baad mein add hogi
-  console.log(`[DEV] SMS OTP for ${identifier}: ${otp}`);
+  return sendOtpSms(identifier, otp);
 };
 
 export const resendOtp = async (
