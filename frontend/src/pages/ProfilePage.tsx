@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import {
@@ -38,6 +38,30 @@ async function saveProfile({ name, about, description, avatar }: ProfileForm) {
 
   const response = await apiClient.patch<{ user: AuthUser }>('/users/me', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return response.data.user
+}
+
+async function requestEmailChangeOtp(email: string) {
+  await apiClient.post('/users/me/email/request-otp', { email })
+}
+
+async function verifyEmailChangeOtp(email: string, otp: string) {
+  const response = await apiClient.post<{ user: AuthUser }>('/users/me/email/verify-otp', {
+    email,
+    otp,
+  })
+  return response.data.user
+}
+
+async function requestPhoneChangeOtp(phone: string) {
+  await apiClient.post('/users/me/phone/request-otp', { phone })
+}
+
+async function verifyPhoneChangeOtp(phone: string, otp: string) {
+  const response = await apiClient.post<{ user: AuthUser }>('/users/me/phone/verify-otp', {
+    phone,
+    otp,
   })
   return response.data.user
 }
@@ -93,12 +117,17 @@ export default function ProfilePage() {
   const updateAuthUser = useAuthStore((state) => state.updateUser)
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(authUser?.name ?? '')
+  const [email, setEmail] = useState(authUser?.email ?? '')
+  const [phone, setPhone] = useState(authUser?.phone ?? '')
   const [about, setAbout] = useState(authUser?.about ?? '')
   const [description, setDescription] = useState(authUser?.description ?? '')
   const [avatar, setAvatar] = useState<File | null>(null)
   const [avatarError, setAvatarError] = useState('')
   const [nameTouched, setNameTouched] = useState(false)
-  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [emailOtpSentTo, setEmailOtpSentTo] = useState<string | null>(null)
+  const [emailOtp, setEmailOtp] = useState('')
+  const [phoneOtpSentTo, setPhoneOtpSentTo] = useState<string | null>(null)
+  const [phoneOtp, setPhoneOtp] = useState('')
 
   const profileQuery = useQuery({
     queryKey: ['current-user-profile'],
@@ -127,6 +156,42 @@ export default function ProfilePage() {
       setAvatarError('')
     },
   })
+  const requestEmailOtpMutation = useMutation({
+    mutationFn: requestEmailChangeOtp,
+    onSuccess: (_, requestedEmail) => {
+      setEmailOtpSentTo(requestedEmail)
+      setEmailOtp('')
+    },
+  })
+  const verifyEmailOtpMutation = useMutation({
+    mutationFn: ({ email: targetEmail, otp }: { email: string; otp: string }) =>
+      verifyEmailChangeOtp(targetEmail, otp),
+    onSuccess: (updatedUser) => {
+      updateAuthUser(updatedUser)
+      queryClient.setQueryData(['current-user-profile'], updatedUser)
+      setEmail(updatedUser.email ?? '')
+      setEmailOtpSentTo(null)
+      setEmailOtp('')
+    },
+  })
+  const requestPhoneOtpMutation = useMutation({
+    mutationFn: requestPhoneChangeOtp,
+    onSuccess: (_, requestedPhone) => {
+      setPhoneOtpSentTo(requestedPhone)
+      setPhoneOtp('')
+    },
+  })
+  const verifyPhoneOtpMutation = useMutation({
+    mutationFn: ({ phone: targetPhone, otp }: { phone: string; otp: string }) =>
+      verifyPhoneChangeOtp(targetPhone, otp),
+    onSuccess: (updatedUser) => {
+      updateAuthUser(updatedUser)
+      queryClient.setQueryData(['current-user-profile'], updatedUser)
+      setPhone(updatedUser.phone ?? '')
+      setPhoneOtpSentTo(null)
+      setPhoneOtp('')
+    },
+  })
 
   const trimmedName = name.trim()
   const nameError =
@@ -135,11 +200,34 @@ export default function ProfilePage() {
       : trimmedName.length > 50
         ? 'Name must be 50 characters or fewer.'
         : ''
+  const normalizedEmail = email.trim().toLowerCase()
+  const emailError =
+    !normalizedEmail && profile?.email
+      ? 'Enter a replacement email address.'
+      : normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+        ? 'Enter a valid email address.'
+        : ''
+  const normalizedPhone = phone.replace(/\D/g, '')
+  const phoneError =
+    !normalizedPhone && profile?.phone
+      ? 'Enter a replacement phone number.'
+      : normalizedPhone && !/^[6-9]\d{9}$/.test(normalizedPhone)
+        ? 'Enter a valid 10-digit Indian phone number.'
+        : ''
+  const emailNeedsVerification = normalizedEmail !== (profile?.email ?? '')
+  const phoneNeedsVerification = normalizedPhone !== (profile?.phone ?? '')
+  const profileSaveDisabled =
+    saveMutation.isPending ||
+    Boolean(nameError) ||
+    Boolean(avatarError) ||
+    Boolean(emailError) ||
+    Boolean(phoneError) ||
+    emailNeedsVerification ||
+    phoneNeedsVerification
 
   function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0] ?? null
     event.currentTarget.value = ''
-    if (!file) return
     if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       setAvatarError('Choose a JPEG, PNG, or WebP image.')
       return
@@ -149,18 +237,25 @@ export default function ProfilePage() {
       return
     }
     setAvatarError('')
-    if (!editing) beginEditing()
     setAvatar(file)
   }
 
   function cancelEditing() {
     setName(profile?.name ?? '')
+    setEmail(profile?.email ?? '')
+    setPhone(profile?.phone ?? '')
     setAbout(profile?.about ?? '')
     setDescription(profile?.description ?? '')
     setAvatar(null)
     setAvatarError('')
     setNameTouched(false)
     saveMutation.reset()
+    requestEmailOtpMutation.reset()
+    verifyEmailOtpMutation.reset()
+    requestPhoneOtpMutation.reset()
+    verifyPhoneOtpMutation.reset()
+    setEmailOtpSentTo(null)
+    setPhoneOtpSentTo(null)
     setEditing(false)
   }
 
@@ -181,16 +276,13 @@ export default function ProfilePage() {
   function beginEditing() {
     if (!profile) return
     setName(profile.name)
+    setEmail(profile.email ?? '')
+    setPhone(profile.phone ?? '')
     setAbout(profile.about ?? '')
     setDescription(profile.description ?? '')
     setNameTouched(false)
     saveMutation.reset()
     setEditing(true)
-  }
-
-  function chooseAvatar() {
-    if (!editing) beginEditing()
-    avatarInputRef.current?.click()
   }
 
   return (
@@ -230,7 +322,7 @@ export default function ProfilePage() {
                 <button
                   type="submit"
                   form="profile-edit-form"
-                  disabled={saveMutation.isPending || Boolean(nameError) || Boolean(avatarError)}
+                  disabled={profileSaveDisabled}
                   className="inline-flex h-9 items-center gap-2 rounded-lg bg-[rgb(224,53,70)] px-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[rgb(196,38,55)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saveMutation.isPending ? (
@@ -274,70 +366,46 @@ export default function ProfilePage() {
             </section>
           ) : profile ? (
             <div className="space-y-6">
-              <section className="relative rounded-2xl border border-rose-100 bg-white shadow-sm">
+              <section className="relative overflow-hidden rounded-2xl border border-rose-100 bg-white shadow-sm">
                 <div className="h-36 bg-gradient-to-r from-rose-100 via-pink-50 to-orange-50 sm:h-44">
-                  <div className="pointer-events-none absolute inset-x-0 top-0 h-36 overflow-hidden rounded-t-2xl sm:h-44">
-                    <div className="absolute right-0 top-0 h-44 w-44 translate-x-12 -translate-y-16 rounded-full bg-white/40 blur-2xl" />
-                    <div className="absolute right-24 top-10 size-20 rounded-full border border-white/60 bg-white/20" />
-                  </div>
+                  <div className="absolute right-0 top-0 h-44 w-44 translate-x-12 -translate-y-16 rounded-full bg-white/40 blur-2xl" />
+                  <div className="absolute right-24 top-10 size-20 rounded-full border border-white/60 bg-white/20" />
                 </div>
-                <div className="relative px-4 pb-5 sm:px-8 sm:pb-6">
-                  <div className="flex min-w-0 items-end gap-4 sm:gap-5">
-                    <div className="-mt-10 flex shrink-0 flex-col items-center gap-2 sm:-mt-12">
-                      <div
-                        className="relative shrink-0 overflow-visible"
-                        style={{ width: 88, height: 88, minWidth: 88, minHeight: 88 }}
-                      >
-                        {avatarPreview || profile.avatarUrl ? (
-                          <img
-                            src={avatarPreview ?? profile.avatarUrl ?? undefined}
-                            alt={`${profile.name}'s profile`}
-                            className="block rounded-2xl border-4 border-white bg-white object-cover shadow-md"
-                            style={{
-                              width: 88,
-                              height: 88,
-                              maxWidth: 'none',
-                              objectFit: 'cover',
-                            }}
-                          />
-                        ) : (
-                          <div
-                            className="grid place-items-center rounded-2xl border-4 border-white bg-rose-100 text-2xl font-semibold text-rose-700 shadow-md"
-                            style={{ width: 88, height: 88 }}
+                <div className="relative px-5 pb-6 sm:px-8">
+                  <div className="-mt-12 flex flex-wrap items-end justify-between gap-4 sm:-mt-14">
+                    <div className="relative">
+                      {avatarPreview || profile.avatarUrl ? (
+                        <img
+                          src={avatarPreview ?? profile.avatarUrl ?? undefined}
+                          alt={`${profile.name}'s profile`}
+                          className="size-24 rounded-2xl border-4 border-white bg-white object-cover shadow-md sm:size-28"
+                        />
+                      ) : (
+                        <div className="grid size-24 place-items-center rounded-2xl border-4 border-white bg-rose-100 text-2xl font-semibold text-rose-700 shadow-md sm:size-28 sm:text-3xl">
+                          {getInitials(name || profile.name)}
+                        </div>
+                      )}
+                      {editing && (
+                        <>
+                          <label
+                            htmlFor="profile-page-avatar"
+                            title="Change profile photo"
+                            className="absolute -bottom-2 -right-2 grid size-9 cursor-pointer place-items-center rounded-full border-2 border-white bg-gray-900 text-white shadow transition hover:bg-gray-700"
                           >
-                            {getInitials(name || profile.name)}
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={chooseAvatar}
-                          title="Change profile photo"
-                          aria-label="Change profile photo"
-                          className="absolute bottom-1 right-1 z-10 grid size-10 place-items-center rounded-full border-2 border-white bg-gray-900 text-white shadow-md transition hover:bg-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
-                          style={{ position: 'absolute', right: 4, bottom: 4 }}
-                        >
-                          <Camera aria-hidden="true" className="size-4" />
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={chooseAvatar}
-                        className="inline-flex min-h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1 text-xs font-semibold text-gray-600 transition hover:bg-rose-50 hover:text-[rgb(224,53,70)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
-                      >
-                        <Camera aria-hidden="true" className="size-3.5" />
-                        Change photo
-                      </button>
-                      <input
-                        ref={avatarInputRef}
-                        id="profile-page-avatar"
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        onChange={handleAvatarChange}
-                        className="sr-only"
-                      />
+                            <Camera aria-hidden="true" className="size-4" />
+                          </label>
+                          <input
+                            id="profile-page-avatar"
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            onChange={handleAvatarChange}
+                            className="sr-only"
+                          />
+                        </>
+                      )}
                     </div>
-                    <div className="min-w-0 flex-1 pb-1">
-                      <p className="break-words text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">
+                    <div className="min-w-0 flex-1 pb-1 sm:pl-2">
+                      <p className="truncate text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">
                         {editing ? name || 'Your name' : profile.name}
                       </p>
                       <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-500">
@@ -345,7 +413,7 @@ export default function ProfilePage() {
                         <span className="truncate">{profile.email || 'No email added'}</span>
                       </p>
                     </div>
-                    <span className="mb-1 hidden shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 sm:inline-flex">
+                    <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
                       <Check aria-hidden="true" className="size-3.5" />
                       Profile
                     </span>
@@ -399,29 +467,139 @@ export default function ProfilePage() {
                     <div>
                       <label htmlFor="profile-email" className="mb-2 block text-sm font-medium text-gray-700">
                         Email address
-                        <span className="ml-2 text-xs font-normal text-gray-400">Not editable</span>
                       </label>
                       <input
                         id="profile-email"
-                        value={profile.email ?? ''}
-                        readOnly
-                        aria-readonly="true"
-                        className="h-11 w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-3.5 text-sm text-gray-500 outline-none"
+                        type="email"
+                        autoComplete="email"
+                        maxLength={254}
+                        value={email}
+                        onChange={(event) => {
+                          setEmail(event.currentTarget.value)
+                          setEmailOtpSentTo(null)
+                          requestEmailOtpMutation.reset()
+                          verifyEmailOtpMutation.reset()
+                        }}
+                        aria-invalid={Boolean(emailError)}
+                        className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 aria-invalid:border-red-500"
+                        placeholder="you@example.com"
                       />
+                      {emailError && <p role="alert" className="mt-1.5 text-xs text-red-600">{emailError}</p>}
+                      {emailNeedsVerification && !emailError && (
+                        <div className="mt-2 space-y-2">
+                          {emailOtpSentTo === normalizedEmail ? (
+                            <div className="flex flex-wrap gap-2">
+                              <input
+                                aria-label="Email verification code"
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
+                                maxLength={6}
+                                value={emailOtp}
+                                onChange={(event) => setEmailOtp(event.currentTarget.value.replace(/\D/g, '').slice(0, 6))}
+                                placeholder="6-digit code"
+                                className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                              />
+                              <button
+                                type="button"
+                                disabled={emailOtp.length !== 6 || verifyEmailOtpMutation.isPending}
+                                onClick={() => verifyEmailOtpMutation.mutate({ email: normalizedEmail, otp: emailOtp })}
+                                className="h-9 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {verifyEmailOtpMutation.isPending ? 'Verifying…' : 'Verify email'}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={requestEmailOtpMutation.isPending}
+                              onClick={() => requestEmailOtpMutation.mutate(normalizedEmail)}
+                              className="h-8 rounded-lg bg-rose-50 px-3 text-xs font-semibold text-[rgb(196,38,55)] hover:bg-rose-100 disabled:opacity-50"
+                            >
+                              {requestEmailOtpMutation.isPending ? 'Sending code…' : 'Send verification code'}
+                            </button>
+                          )}
+                          <p className="text-xs text-gray-500">
+                            Verify the new email before it is linked to your account.
+                          </p>
+                        </div>
+                      )}
+                      {requestEmailOtpMutation.isError && (
+                        <p role="alert" className="mt-1.5 text-xs text-red-600">{getErrorMessage(requestEmailOtpMutation.error)}</p>
+                      )}
+                      {verifyEmailOtpMutation.isError && (
+                        <p role="alert" className="mt-1.5 text-xs text-red-600">{getErrorMessage(verifyEmailOtpMutation.error)}</p>
+                      )}
                     </div>
-                    {profile.phone && (
-                      <div className="sm:col-span-2">
-                        <label htmlFor="profile-phone" className="mb-2 block text-sm font-medium text-gray-700">
-                          Phone number
-                        </label>
+                    <div className="sm:col-span-2">
+                      <label htmlFor="profile-phone" className="mb-2 block text-sm font-medium text-gray-700">
+                        Phone number
+                      </label>
+                      <div className="flex h-11 items-center rounded-lg border border-gray-200 bg-white focus-within:border-rose-400 focus-within:ring-4 focus-within:ring-rose-100">
+                        <span className="border-r border-gray-200 px-3 text-sm text-gray-500">+91</span>
                         <input
                           id="profile-phone"
-                          value={`+91 ${profile.phone}`}
-                          readOnly
-                          className="h-11 w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-3.5 text-sm text-gray-500 outline-none"
+                          type="tel"
+                          inputMode="numeric"
+                          autoComplete="tel-national"
+                          maxLength={10}
+                          value={phone}
+                          onChange={(event) => {
+                            setPhone(event.currentTarget.value.replace(/\D/g, '').slice(0, 10))
+                            setPhoneOtpSentTo(null)
+                            requestPhoneOtpMutation.reset()
+                            verifyPhoneOtpMutation.reset()
+                          }}
+                          aria-invalid={Boolean(phoneError)}
+                          placeholder="98765 43210"
+                          className="h-full min-w-0 flex-1 rounded-r-lg border-0 bg-transparent px-3.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0 aria-invalid:text-red-600"
                         />
                       </div>
-                    )}
+                      {phoneError && <p role="alert" className="mt-1.5 text-xs text-red-600">{phoneError}</p>}
+                      {phoneNeedsVerification && !phoneError && (
+                        <div className="mt-2 space-y-2">
+                          {phoneOtpSentTo === normalizedPhone ? (
+                            <div className="flex flex-wrap gap-2">
+                              <input
+                                aria-label="Phone verification code"
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
+                                maxLength={6}
+                                value={phoneOtp}
+                                onChange={(event) => setPhoneOtp(event.currentTarget.value.replace(/\D/g, '').slice(0, 6))}
+                                placeholder="6-digit code"
+                                className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                              />
+                              <button
+                                type="button"
+                                disabled={phoneOtp.length !== 6 || verifyPhoneOtpMutation.isPending}
+                                onClick={() => verifyPhoneOtpMutation.mutate({ phone: normalizedPhone, otp: phoneOtp })}
+                                className="h-9 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {verifyPhoneOtpMutation.isPending ? 'Verifying…' : 'Verify phone'}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={requestPhoneOtpMutation.isPending}
+                              onClick={() => requestPhoneOtpMutation.mutate(normalizedPhone)}
+                              className="h-8 rounded-lg bg-rose-50 px-3 text-xs font-semibold text-[rgb(196,38,55)] hover:bg-rose-100 disabled:opacity-50"
+                            >
+                              {requestPhoneOtpMutation.isPending ? 'Sending code…' : 'Send verification code'}
+                            </button>
+                          )}
+                          <p className="text-xs text-gray-500">
+                            Verify the new phone number before it is linked to your account.
+                          </p>
+                        </div>
+                      )}
+                      {requestPhoneOtpMutation.isError && (
+                        <p role="alert" className="mt-1.5 text-xs text-red-600">{getErrorMessage(requestPhoneOtpMutation.error)}</p>
+                      )}
+                      {verifyPhoneOtpMutation.isError && (
+                        <p role="alert" className="mt-1.5 text-xs text-red-600">{getErrorMessage(verifyPhoneOtpMutation.error)}</p>
+                      )}
+                    </div>
                     <div className="sm:col-span-2">
                       <label htmlFor="profile-about" className="mb-2 block text-sm font-medium text-gray-700">
                         About
@@ -470,9 +648,9 @@ export default function ProfilePage() {
                   <div className="divide-y divide-gray-100 sm:grid sm:grid-cols-2 sm:divide-y-0 sm:gap-x-10">
                     <Detail icon={UserRound} label="Full name" value={profile.name} />
                     <Detail icon={Mail} label="Email address" value={profile.email ?? ''} />
-                    {profile.phone && (
-                      <Detail icon={Phone} label="Phone number" value={`+91 ${profile.phone}`} />
-                    )}
+                    {/* {profile.phone && ( */}
+                      <Detail icon={Phone} label="Phone number" value={profile.phone ? `+91 ${profile.phone}`: ''} />
+                    {/* )} */}
                     <Detail icon={UserRound} label="About" value={profile.about} />
                     <div className="sm:col-span-2">
                       <Detail icon={Pencil} label="Description" value={profile.description ?? ''} />

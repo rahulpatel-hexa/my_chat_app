@@ -4,13 +4,18 @@ const otpSchema = new Schema(
   {
     identifier: { type: String, required: true },
     channel: { type: String, enum: ["phone", "email"], required: true },
-    purpose: { type: String, enum: ["login", "signup", "add_phone"], required: true },
+    purpose: {
+      type: String,
+      enum: ["login", "signup", "add_phone", "change_email", "change_phone"],
+      required: true,
+    },
     otpHash: { type: String, required: true },
     attempts: { type: Number, default: 0 },
     resendCount: { type: Number, default: 0 },
     lastSentAt: { type: Date, default: Date.now },
     expiresAt: { type: Date, required: true },
     pendingData: { name: String },
+    ownerUserId: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );

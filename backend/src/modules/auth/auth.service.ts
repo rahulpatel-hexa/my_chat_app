@@ -19,6 +19,126 @@ const googleOAuthClient = new OAuth2Client();
 // 6 digit secure random OTP
 const generateOtp = (): string => crypto.randomInt(100000, 1000000).toString();
 
+const requestProfileChangeOtp = async (
+    identifier: string,
+    purpose: "change_email" | "change_phone",
+    channel: "email" | "phone",
+    userId: string,
+) => {
+    const existingOtp = await Otp.findOne({ identifier, purpose });
+    if (existingOtp) {
+        const elapsed = Date.now() - existingOtp.lastSentAt.getTime();
+        if (elapsed < RESEND_COOLDOWN_MS) {
+            const wait = Math.ceil((RESEND_COOLDOWN_MS - elapsed) / 1000);
+            throw new ApiError(429, `Please wait ${wait} seconds before requesting another OTP.`);
+        }
+    }
+
+    const otp = generateOtp();
+    await Otp.findOneAndUpdate(
+        { identifier, purpose },
+        {
+            channel,
+            otpHash: await bcrypt.hash(otp, 10),
+            attempts: 0,
+            resendCount: 0,
+            lastSentAt: new Date(),
+            expiresAt: new Date(Date.now() + env.otpExpiresMin * 60 * 1000),
+            ownerUserId: userId,
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+
+    try {
+        await (channel === "email" ? sendOtpEmail(identifier, otp) : sendOtpSms(identifier, otp));
+    } catch (error) {
+        await Otp.deleteOne({ identifier, purpose, ownerUserId: userId });
+        throw error;
+    }
+};
+
+const verifyProfileChangeOtp = async (
+    identifier: string,
+    otp: string,
+    purpose: "change_email" | "change_phone",
+    userId: string,
+) => {
+    const record = await Otp.findOne({ identifier, purpose, ownerUserId: userId });
+    if (!record || record.expiresAt.getTime() <= Date.now()) {
+        throw new ApiError(400, "OTP expired. Please request a new one.");
+    }
+    if (record.attempts >= MAX_ATTEMPTS) {
+        throw new ApiError(429, "Too many wrong attempts. Request a new OTP.");
+    }
+
+    if (!(await bcrypt.compare(otp, record.otpHash))) {
+        record.attempts += 1;
+        await record.save();
+        throw new ApiError(400, "Invalid OTP.");
+    }
+
+    const user = await User.findOne({ _id: userId, status: "active" });
+    if (!user) {
+        throw new ApiError(401, "Account is unavailable.");
+    }
+
+    if (purpose === "change_email") {
+        user.email = identifier;
+        user.isEmailVerified = true;
+        if (!user.authProviders.includes("email")) {
+            user.authProviders.push("email");
+        }
+    } else {
+        user.phone = identifier;
+        user.isPhoneVerified = true;
+        if (!user.authProviders.includes("phone")) {
+            user.authProviders.push("phone");
+        }
+    }
+
+    try {
+        await user.save();
+    } catch (error) {
+        if (isDuplicateKeyError(error)) {
+            throw new ApiError(
+                409,
+                purpose === "change_email"
+                    ? "This email is already linked to another account."
+                    : "This phone number is already linked to another account.",
+            );
+        }
+        throw error;
+    }
+
+    await record.deleteOne();
+    return user;
+};
+
+export const requestProfileEmailOtp = async (email: string, userId: string) => {
+    const userWithEmail = await User.findOne({ email }).select("_id").lean();
+    if (userWithEmail && String(userWithEmail._id) !== userId) {
+        throw new ApiError(409, "This email is already linked to another account.");
+    }
+    await requestProfileChangeOtp(email, "change_email", "email", userId);
+};
+
+export const verifyProfileEmailOtp = (email: string, otp: string, userId: string) =>
+    verifyProfileChangeOtp(email, otp, "change_email", userId);
+
+export const requestProfilePhoneOtp = async (phone: string, userId: string) => {
+    const userWithPhone = await User.findOne({ phone }).select("_id").lean();
+    if (userWithPhone && String(userWithPhone._id) !== userId) {
+        throw new ApiError(409, "This phone number is already linked to another account.");
+    }
+    await requestProfileChangeOtp(phone, "change_phone", "phone", userId);
+};
+
+export const verifyProfilePhoneOtp = (phone: string, otp: string, userId: string) =>
+    verifyProfileChangeOtp(phone, otp, "change_phone", userId);
+
+const isDuplicateKeyError = (error: unknown): boolean =>
+    Boolean(error && typeof error === "object" && "code" in error && error.code === 11000);
+
 // Send OTP
 export const requestSignupOtp = async (name: string, email: string) => {
     const existing = await User.findOne({ email });

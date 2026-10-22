@@ -20,6 +20,24 @@ export const verifyPhoneLoginOtpSchema = z.object({
   purpose: z.enum(["login", "signup"]).default("login"),
 });
 
+export const requestProfileEmailOtpSchema = z.object({
+  email: z.string().trim().toLowerCase().max(254).email("Enter a valid email address"),
+});
+
+export const verifyProfileEmailOtpSchema = z.object({
+  email: z.string().trim().toLowerCase().max(254).email(),
+  otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+});
+
+export const requestProfilePhoneOtpSchema = z.object({
+  phone: z.string().trim().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian phone number"),
+});
+
+export const verifyProfilePhoneOtpSchema = z.object({
+  phone: z.string().trim().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian phone number"),
+  otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+});
+
 export const googleSignInSchema = z.object({
   credential: z.string().trim().min(1, "Google credential is required").max(8192),
 });

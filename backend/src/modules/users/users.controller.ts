@@ -8,6 +8,7 @@ import { uploadsDirectory } from "../../middlewares/uploadAvatar";
 import { unlink } from "node:fs/promises";
 import path from "node:path";
 import { deleteCloudinaryAvatar, uploadAvatarToCloudinary } from "../../services/cloudinary.service";
+import * as authService from "../auth/auth.service";
 
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as AuthRequest).userId;
@@ -62,7 +63,6 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     if (!user) {
         throw new ApiError(401, "Account is unavailable.");
     }
-
     const previousAvatarUrl = user.avatarUrl;
     const previousAvatarPublicId = user.avatarPublicId;
     let uploadedAvatar: Awaited<ReturnType<typeof uploadAvatarToCloudinary>> | undefined;
@@ -107,6 +107,68 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
         }
     }
 
+    res.json({
+        success: true,
+        user: {
+            id: String(user._id),
+            name: user.name,
+            email: user.email ?? null,
+            phone: user.phone ?? null,
+            avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
+            about: user.about,
+            description: user.description ?? "",
+        },
+    });
+});
+
+export const requestEmailChangeOtp = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as AuthRequest).userId;
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized");
+    }
+
+    await authService.requestProfileEmailOtp(req.body.email, userId);
+    res.json({ success: true, message: "Verification code sent to your email." });
+});
+
+export const verifyEmailChangeOtp = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as AuthRequest).userId;
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized");
+    }
+
+    const user = await authService.verifyProfileEmailOtp(req.body.email, req.body.otp, userId);
+    res.json({
+        success: true,
+        user: {
+            id: String(user._id),
+            name: user.name,
+            email: user.email ?? null,
+            phone: user.phone ?? null,
+            avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
+            about: user.about,
+            description: user.description ?? "",
+        },
+    });
+});
+
+export const requestPhoneChangeOtp = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as AuthRequest).userId;
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized");
+    }
+
+    await authService.requestProfilePhoneOtp(req.body.phone, userId);
+    res.json({ success: true, message: "Verification code sent to your phone." });
+});
+
+export const verifyPhoneChangeOtp = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as AuthRequest).userId;
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized");
+    }
+
+    const user = await authService.verifyProfilePhoneOtp(req.body.phone, req.body.otp, userId);
     res.json({
         success: true,
         user: {

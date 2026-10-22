@@ -9,6 +9,7 @@ import HomePage from '@/pages/HomePage'
 
 type ProfileFields = {
   name: string
+  email: string
   about: string
   avatar: File | null
 }
@@ -21,6 +22,18 @@ async function updateProfile({ name, about, avatar }: ProfileFields) {
 
   const response = await apiClient.patch<{ user: AuthUser }>('/users/me', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return response.data.user
+}
+
+async function requestEmailVerification(email: string) {
+  await apiClient.post('/users/me/email/request-otp', { email })
+}
+
+async function verifyEmailVerification(email: string, otp: string) {
+  const response = await apiClient.post<{ user: AuthUser }>('/users/me/email/verify-otp', {
+    email,
+    otp,
   })
   return response.data.user
 }
@@ -53,10 +66,14 @@ export default function ProfileSetupPage() {
   const location = useLocation()
   const initialName = (location.state as { name?: string } | null)?.name ?? ''
   const [name, setName] = useState(initialName)
+  const [email, setEmail] = useState('')
+  const [emailOtp, setEmailOtp] = useState('')
+  const [emailOtpSentTo, setEmailOtpSentTo] = useState<string | null>(null)
   const [about, setAbout] = useState('Hey there!')
   const [avatar, setAvatar] = useState<File | null>(null)
   const [avatarError, setAvatarError] = useState('')
   const [nameTouched, setNameTouched] = useState(false)
+  const [emailTouched, setEmailTouched] = useState(false)
   const [submitAttempted, setSubmitAttempted] = useState(false)
   const updateAuthUser = useAuthStore((state) => state.updateUser)
 
@@ -75,6 +92,26 @@ export default function ProfileSetupPage() {
     mutationFn: updateProfile,
     onSuccess: (user) => {
       updateAuthUser(user)
+      const emailToVerify = email.trim().toLowerCase()
+      if (emailToVerify && emailToVerify !== user.email) {
+        requestEmailOtpMutation.mutate(emailToVerify)
+        return
+      }
+      navigate('/chats', { replace: true })
+    },
+  })
+  const requestEmailOtpMutation = useMutation({
+    mutationFn: requestEmailVerification,
+    onSuccess: (_, requestedEmail) => {
+      setEmailOtpSentTo(requestedEmail)
+      setEmailOtp('')
+    },
+  })
+  const verifyEmailOtpMutation = useMutation({
+    mutationFn: ({ email: targetEmail, otp }: { email: string; otp: string }) =>
+      verifyEmailVerification(targetEmail, otp),
+    onSuccess: (user) => {
+      updateAuthUser(user)
       navigate('/chats', { replace: true })
     },
   })
@@ -89,7 +126,13 @@ export default function ProfileSetupPage() {
           ? 'Name must be 50 characters or fewer.'
           : ''
   const showNameError = Boolean(nameError) && (nameTouched || submitAttempted)
-  const canContinue = !nameError && !avatarError && !mutation.isPending
+  const normalizedEmail = email.trim()
+  const emailError =
+    normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+      ? 'Enter a valid email address.'
+      : ''
+  const showEmailError = Boolean(emailError) && (emailTouched || submitAttempted)
+  const canContinue = !nameError && !emailError && !avatarError && !mutation.isPending
 
   function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0] ?? null
@@ -109,8 +152,8 @@ export default function ProfileSetupPage() {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitAttempted(true)
-    if (nameError || avatarError || mutation.isPending) return
-    mutation.mutate({ name: trimmedName, about, avatar })
+    if (nameError || emailError || avatarError || mutation.isPending) return
+    mutation.mutate({ name: trimmedName, email: normalizedEmail, about, avatar })
   }
 
   return (
@@ -207,6 +250,73 @@ export default function ProfileSetupPage() {
               )}
             </div>
 
+            <div className="mb-4">
+              <label htmlFor="profile-email" className="mb-2 block text-sm font-medium text-gray-700">
+                Email <span className="font-normal text-gray-400">(optional)</span>
+              </label>
+              <input
+                id="profile-email"
+                type="email"
+                autoComplete="email"
+                maxLength={254}
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.currentTarget.value)
+                  mutation.reset()
+                  requestEmailOtpMutation.reset()
+                  verifyEmailOtpMutation.reset()
+                  setEmailOtpSentTo(null)
+                }}
+                onBlur={() => setEmailTouched(true)}
+                aria-invalid={showEmailError}
+                aria-describedby={showEmailError ? 'profile-email-error' : undefined}
+                placeholder="you@example.com"
+                className="h-11 w-full rounded-md border border-gray-300 bg-white px-3 text-gray-900 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-300/50 aria-invalid:border-red-600"
+              />
+              {showEmailError && (
+                <p id="profile-email-error" role="alert" className="mt-1 text-sm text-red-600">
+                  {emailError}
+                </p>
+              )}
+              {!showEmailError && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Optional. You must verify this email before it can be used to sign in.
+                </p>
+              )}
+              {normalizedEmail && !emailError && emailOtpSentTo === normalizedEmail && (
+                <div className="mt-3 flex gap-2">
+                  <input
+                    aria-label="Email verification code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={emailOtp}
+                    onChange={(event) => setEmailOtp(event.currentTarget.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="6-digit email code"
+                    className="h-10 min-w-0 flex-1 rounded-md border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-300/50"
+                  />
+                  <button
+                    type="button"
+                    disabled={emailOtp.length !== 6 || verifyEmailOtpMutation.isPending}
+                    onClick={() => verifyEmailOtpMutation.mutate({ email: normalizedEmail, otp: emailOtp })}
+                    className="rounded-md bg-gray-800 px-3 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    {verifyEmailOtpMutation.isPending ? 'Verifying…' : 'Verify'}
+                  </button>
+                </div>
+              )}
+              {requestEmailOtpMutation.isError && (
+                <p role="alert" className="mt-2 text-sm text-red-600">
+                  {getApiErrorMessage(requestEmailOtpMutation.error)}
+                </p>
+              )}
+              {verifyEmailOtpMutation.isError && (
+                <p role="alert" className="mt-2 text-sm text-red-600">
+                  {getApiErrorMessage(verifyEmailOtpMutation.error)}
+                </p>
+              )}
+            </div>
+
             <div className="mb-5">
               <label htmlFor="profile-about" className="mb-2 block text-sm font-medium text-gray-700">
                 About <span className="font-normal text-gray-400">(optional)</span>
@@ -233,13 +343,22 @@ export default function ProfileSetupPage() {
 
             <button
               type="submit"
-              disabled={!canContinue}
+              disabled={
+                !canContinue ||
+                requestEmailOtpMutation.isPending ||
+                verifyEmailOtpMutation.isPending ||
+                Boolean(normalizedEmail && emailOtpSentTo === normalizedEmail)
+              }
               className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-[rgb(224,53,70)] px-4 text-sm font-medium text-white hover:bg-[rgb(196,38,55)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {mutation.isPending && (
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
               )}
-              {mutation.isPending ? 'Saving profile...' : 'Continue'}
+              {mutation.isPending || requestEmailOtpMutation.isPending
+                ? 'Saving profile...'
+                : emailOtpSentTo === normalizedEmail && normalizedEmail
+                  ? 'Verify email above'
+                  : 'Continue'}
             </button>
           </form>
         </section>
