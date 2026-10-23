@@ -16,4 +16,6 @@ export type Message = {
   text: string
   createdAt: string
   status: 'sent' | 'delivered' | 'read'
+  type?: 'text' | 'image' | 'file' | 'audio'
+  updatedAt?: string
 }

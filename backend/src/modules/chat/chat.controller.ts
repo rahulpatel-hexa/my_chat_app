@@ -3,7 +3,13 @@ import { AuthRequest } from "../../middlewares/auth";
 import { getPublicAvatarUrl } from "../../utils/avatarUrl";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { createOrGetDirectConversation, getMyDirectConversations } from "./chat.service";
+import {
+    createConversationMessage,
+    createOrGetDirectConversation,
+    getConversationMessages,
+    getMyDirectConversations,
+} from "./chat.service";
+import { getMessagesQuerySchema } from "./chat.schema";
 
 function getUserId(req: Request) {
     const userId = (req as AuthRequest).userId;
@@ -63,5 +69,69 @@ export const getConversations = asyncHandler(async (req: Request, res: Response)
         conversations: conversations.map(({ conversation, otherUser }) =>
             toListItem(conversation, otherUser, myId, origin),
         ),
+    });
+});
+
+export const createMessage = asyncHandler(async (req: Request, res: Response) => {
+    const senderId = getUserId(req);
+    const conversationId = req.params.id;
+    if (typeof conversationId !== "string" || !/^[0-9a-fA-F]{24}$/.test(conversationId)) {
+        throw new ApiError(400, "A valid conversation ID is required.");
+    }
+
+    const message = await createConversationMessage(conversationId, senderId, req.body.text as string);
+    res.status(201).json({
+        success: true,
+        message: {
+            id: String(message._id),
+            conversationId: String(message.conversationId),
+            senderId: String(message.senderId),
+            type: message.type,
+            text: message.text,
+            status: message.status,
+            createdAt: message.createdAt,
+            updatedAt: message.updatedAt,
+        },
+    });
+});
+
+export const getMessages = asyncHandler(async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    const conversationId = req.params.id;
+    if (typeof conversationId !== "string" || !/^[0-9a-fA-F]{24}$/.test(conversationId)) {
+        throw new ApiError(400, "A valid conversation ID is required.");
+    }
+
+    const query = getMessagesQuerySchema.safeParse(req.query);
+    if (!query.success) {
+        throw new ApiError(400, query.error.issues[0].message);
+    }
+    console.log('query', query)
+
+    const { cursor, limit } = query.data;
+    console.table({
+        cursor,
+        limit
+    })
+    const result = await getConversationMessages(
+        conversationId,
+        userId,
+        cursor ? new Date(cursor) : undefined,
+        limit,
+    );
+
+    res.json({
+        success: true,
+        messages: result.messages.map((message) => ({
+            id: String(message._id),
+            conversationId: String(message.conversationId),
+            senderId: String(message.senderId),
+            type: message.type,
+            text: message.text,
+            status: message.status,
+            createdAt: message.createdAt,
+            updatedAt: message.updatedAt,
+        })),
+        nextCursor: result.nextCursor,
     });
 });

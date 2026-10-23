@@ -1,17 +1,29 @@
 import { Send, Smile } from 'lucide-react'
 import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
-export default function MessageInput({ onSend }: { onSend: (text: string) => void }) {
+export default function MessageInput({
+  onSend,
+}: {
+  onSend: (text: string) => Promise<boolean>
+}) {
   const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  function sendMessage() {
+  async function sendMessage() {
     const message = text.trim()
-    if (!message) return
-    onSend(message)
-    setText('')
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '24px'
+    if (!message || sending) return
+    setSending(true)
+    try {
+      const sent = await onSend(message)
+      if (sent) {
+        setText('')
+        if (textareaRef.current) {
+          textareaRef.current.style.height = '24px'
+        }
+      }
+    } finally {
+      setSending(false)
     }
   }
 
@@ -62,7 +74,7 @@ export default function MessageInput({ onSend }: { onSend: (text: string) => voi
       </label>
       <button
         type="submit"
-        disabled={!text.trim()}
+        disabled={!text.trim() || sending}
         aria-label="Send message"
         className="grid size-11 shrink-0 place-items-center rounded-xl bg-[rgb(224,53,70)] text-white transition-colors hover:bg-[rgb(196,38,55)] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
       >

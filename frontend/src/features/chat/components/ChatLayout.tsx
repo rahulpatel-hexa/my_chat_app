@@ -1,8 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useParams } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/features/auth/store/useAuthStore'
 import { toConversation, useConversations } from '../api/conversationsApi'
-import type { Message } from '../types'
+import {
+  messagesQueryKey,
+  sendMessage,
+  useConversationMessages,
+} from '../api/messagesApi'
 import ChatHeader from './ChatHeader'
 import EmptyState from './EmptyState'
 import MessageInput from './MessageInput'
@@ -14,24 +20,44 @@ export default function ChatLayout() {
   const userId = useAuthStore((state) => state.user?.id ?? '')
   const conversationsQuery = useConversations(userId)
   const conversations = conversationsQuery.data?.map((item) => toConversation(item, userId)) ?? []
-  const [messages, setMessages] = useState<Message[]>([])
   const selected = conversations.find((conversation) => conversation.id === conversationId)
+  const queryClient = useQueryClient()
+  const messagesQuery = useConversationMessages(conversationId ?? '')
   const selectedMessages = useMemo(
-    () => messages.filter((message) => message.conversationId === conversationId),
-    [conversationId, messages],
+    () => messagesQuery.data?.pages.flatMap((page) => page.messages).reverse() ?? [],
+    [messagesQuery.data],
   )
 
-  function handleSend(text: string) {
-    if (!selected) return
-    const message: Message = {
-      id: `local-${crypto.randomUUID()}`,
-      conversationId: selected.id,
-      senderId: userId,
-      text,
-      createdAt: new Date().toISOString(),
-      status: 'sent',
+  async function handleSend(text: string) {
+    if (!selected) return false
+    try {
+      const message = await sendMessage(selected.id, text)
+      queryClient.setQueryData(
+        messagesQueryKey(selected.id),
+        (current: typeof messagesQuery.data) => {
+          if (!current) return current
+          const firstPage = current.pages[0]
+          if (firstPage.messages.some((item) => item.id === message.id)) return current
+          return {
+            ...current,
+            pages: [
+              { ...firstPage, messages: [message, ...firstPage.messages] },
+              ...current.pages.slice(1),
+            ],
+          }
+        },
+      )
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: messagesQueryKey(selected.id) }),
+        queryClient.invalidateQueries({ queryKey: ['conversations', userId] }),
+      ])
+      return true
+    } catch {
+      toast.error('Unable to send message', {
+        description: 'Please check your connection and try again.',
+      })
+      return false
     }
-    setMessages((current) => [...current, message])
   }
 
   return (
@@ -44,6 +70,12 @@ export default function ChatLayout() {
             messages={selectedMessages}
             conversationId={selected.id}
             conversationName={selected.name}
+            loading={messagesQuery.isLoading}
+            error={messagesQuery.isError ? 'Unable to load messages. Please try again.' : ''}
+            onRetry={() => void messagesQuery.refetch()}
+            hasMore={messagesQuery.hasNextPage}
+            loadingMore={messagesQuery.isFetchingNextPage}
+            onLoadMore={() => void messagesQuery.fetchNextPage()}
           />
           <MessageInput onSend={handleSend} />
         </section>
