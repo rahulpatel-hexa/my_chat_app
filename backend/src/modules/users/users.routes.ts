@@ -13,6 +13,7 @@ import {
     getMe,
     requestEmailChangeOtp,
     requestPhoneChangeOtp,
+    searchUsers,
     updateProfile,
     verifyEmailChangeOtp,
     verifyPhoneChangeOtp,
@@ -20,6 +21,7 @@ import {
 
 const router = Router();
 
+router.get("/search", requireAuth, searchUsers);
 router.get("/me", requireAuth, getMe);
 router.patch("/me", requireAuth, uploadAvatar, updateProfile);
 router.post("/me/email/request-otp", requireAuth, otpLimiter, validate(requestProfileEmailOtpSchema), requestEmailChangeOtp);

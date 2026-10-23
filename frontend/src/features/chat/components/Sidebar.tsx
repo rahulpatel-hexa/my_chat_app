@@ -1,17 +1,20 @@
 import { LogOut, MessageSquarePlus, MoreVertical, Search, UserRound } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { logoutAuthSession } from '@/features/auth/api/authApi'
 import { useAuthStore } from '@/features/auth/store/useAuthStore'
 import { conversations } from '../mock/chatData'
+import type { UserSearchResult } from '../api/usersApi'
 import type { Conversation } from '../types'
 import Avatar from './Avatar'
 import ChatListItem from './ChatListItem'
+import NewChatDialog from './NewChatDialog'
 
 type SidebarProps = {
   conversations?: Conversation[]
   loading?: boolean
+  onSelectUser?: (user: UserSearchResult) => void
 }
 
 function ChatListSkeleton() {
@@ -34,14 +37,15 @@ function ChatListSkeleton() {
 export default function Sidebar({
   conversations: chatConversations = conversations,
   loading = false,
+  onSelectUser,
 }: SidebarProps) {
   const { conversationId } = useParams()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
   const navigate = useNavigate()
-  const location = useLocation()
   const [query, setQuery] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [newChatOpen, setNewChatOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const filtered = useMemo(
     () => chatConversations.filter((item) => item.name.toLowerCase().includes(query.trim().toLowerCase())),
@@ -49,11 +53,10 @@ export default function Sidebar({
   )
 
   function handleNewChat() {
-    navigate('/chats')
-    if (location.pathname === '/chats') {
-      window.requestAnimationFrame(() => searchRef.current?.focus())
-    }
+    setNewChatOpen(true)
   }
+
+  const closeNewChat = useCallback(() => setNewChatOpen(false), [])
 
   async function handleLogout() {
     try {
@@ -73,7 +76,7 @@ export default function Sidebar({
       <header className="flex items-center justify-between border-b border-gray-100 px-4 py-4">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar name={user?.name || 'RS'} avatarUrl={user?.avatarUrl ?? undefined} />
-          <p className="truncate text-base font-semibold tracking-tight text-gray-900">my_chat_app</p>
+          <p className="truncate text-base font-semibold tracking-tight text-gray-900">{user?.name}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button
@@ -150,6 +153,19 @@ export default function Sidebar({
           )}
         </nav>
       </div>
+      {newChatOpen && (
+        <NewChatDialog
+          onClose={closeNewChat}
+          onSelectUser={(selectedUser) => {
+            closeNewChat()
+            if (onSelectUser) {
+              onSelectUser(selectedUser)
+            } else {
+              navigate('/chats', { state: { newChatUser: selectedUser } })
+            }
+          }}
+        />
+      )}
     </aside>
   )
 }

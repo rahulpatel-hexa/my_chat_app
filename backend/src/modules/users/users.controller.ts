@@ -10,6 +10,61 @@ import path from "node:path";
 import { deleteCloudinaryAvatar, uploadAvatarToCloudinary } from "../../services/cloudinary.service";
 import * as authService from "../auth/auth.service";
 
+export const searchUsers = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as AuthRequest).userId;
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized");
+    }
+
+    const query = req.query.q;
+    if (typeof query !== "string") {
+        throw new ApiError(400, "Search query is required.");
+    }
+
+    const searchTerm = query.trim();
+    if (searchTerm.length > 100) {
+        throw new ApiError(400, "Search query must be 100 characters or fewer.");
+    }
+    if (!searchTerm) {
+        res.json({ success: true, users: [] });
+        return;
+    }
+
+    const currentUser = await User.findOne({ _id: userId, status: "active" })
+        .select("blockedUsers")
+        .exec();
+    if (!currentUser) {
+        throw new ApiError(401, "Account is unavailable.");
+    }
+
+    const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const users = await User.find({
+        _id: { $nin: [currentUser._id, ...currentUser.blockedUsers] },
+        status: "active",
+        $or: [
+            { name: { $regex: escapedSearchTerm, $options: "i" } },
+            { email: { $regex: escapedSearchTerm, $options: "i" } },
+            // { phone: { $regex: escapedSearchTerm, $options: "i" } },
+            // { email: searchTerm.toLowerCase() },   // exact
+            { phone: searchTerm }, 
+        ],
+    })
+        .select("name avatarUrl about isOnline")
+        .limit(20)
+        .exec();
+
+    res.json({
+        success: true,
+        users: users.map((user) => ({
+            id: String(user._id),
+            name: user.name,
+            avatarUrl: getPublicAvatarUrl(user.avatarUrl, `${req.protocol}://${req.get("host")}`),
+            about: user.about,
+            isOnline: user.isOnline,
+        })),
+    });
+});
+
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as AuthRequest).userId;
 
