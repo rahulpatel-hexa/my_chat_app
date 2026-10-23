@@ -1,10 +1,15 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useParams } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/features/auth/store/useAuthStore'
-import { toConversation, useConversations } from '../api/conversationsApi'
 import {
+  conversationsQueryKey,
+  toConversation,
+  useConversations,
+} from '../api/conversationsApi'
+import {
+  markConversationRead,
   messagesQueryKey,
   sendMessage,
   useConversationMessages,
@@ -27,6 +32,28 @@ export default function ChatLayout() {
     () => messagesQuery.data?.pages.flatMap((page) => page.messages).reverse() ?? [],
     [messagesQuery.data],
   )
+  useEffect(() => {
+    if (!conversationId || !userId) return
+
+    markConversationRead(conversationId)
+      .then(() => {
+        queryClient.setQueryData(
+          conversationsQueryKey(userId),
+          (current: typeof conversationsQuery.data) =>
+            current?.map((conversation) =>
+              conversation.id === conversationId
+                ? { ...conversation, unreadCount: 0 }
+                : conversation,
+            ),
+        )
+        void queryClient.invalidateQueries({ queryKey: conversationsQueryKey(userId) })
+      })
+      .catch(() => {
+        toast.error('Unable to mark conversation as read', {
+          description: 'Please try again.',
+        })
+      })
+  }, [conversationId, queryClient, userId])
 
   async function handleSend(text: string) {
     if (!selected) return false

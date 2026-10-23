@@ -38,6 +38,10 @@ export async function sendMessage(conversationId: string, text: string) {
   return response.data.message
 }
 
+export async function markConversationRead(conversationId: string) {
+  await apiClient.patch(`/conversations/${conversationId}/read`)
+}
+
 export function useConversationMessages(conversationId: string) {
   return useInfiniteQuery({
     queryKey: messagesQueryKey(conversationId),

@@ -138,3 +138,19 @@ export const getConversationMessages = async (
         nextCursor: hasMore ? messages[messages.length - 1].createdAt.toISOString() : null,
     };
 };
+
+export const markConversationAsRead = async (conversationId: string, userId: string) => {
+    const conversation = await Conversation.findById(conversationId).select("participants").exec();
+    if (!conversation) {
+        throw new ApiError(404, "Conversation not found.");
+    }
+
+    if (!conversation.participants.some((participant) => String(participant) === userId)) {
+        throw new ApiError(403, "You are not a participant in this conversation.");
+    }
+
+    await Conversation.updateOne(
+        { _id: conversation._id },
+        { $set: { [`unreadCounts.${userId}`]: 0 } },
+    ).exec();
+};

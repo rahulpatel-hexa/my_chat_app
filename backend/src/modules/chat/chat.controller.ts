@@ -8,6 +8,7 @@ import {
     createOrGetDirectConversation,
     getConversationMessages,
     getMyDirectConversations,
+    markConversationAsRead,
 } from "./chat.service";
 import { getMessagesQuerySchema } from "./chat.schema";
 
@@ -134,4 +135,15 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
         })),
         nextCursor: result.nextCursor,
     });
+});
+
+export const markAsRead = asyncHandler(async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    const conversationId = req.params.id;
+    if (typeof conversationId !== "string" || !/^[0-9a-fA-F]{24}$/.test(conversationId)) {
+        throw new ApiError(400, "A valid conversation ID is required.");
+    }
+
+    await markConversationAsRead(conversationId, userId);
+    res.json({ success: true });
 });
