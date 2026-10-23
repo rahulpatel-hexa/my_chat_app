@@ -1,12 +1,13 @@
 import axios from 'axios'
 import { MessageCircle, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { createDirectConversation, type ConversationListItem } from '../api/conversationsApi'
 import { searchUsers, type UserSearchResult } from '../api/usersApi'
 import Avatar from './Avatar'
 
 type NewChatDialogProps = {
   onClose: () => void
-  onSelectUser: (user: UserSearchResult) => void
+  onConversationCreated: (conversation: ConversationListItem) => void
 }
 
 function getErrorMessage(error: unknown) {
@@ -16,10 +17,12 @@ function getErrorMessage(error: unknown) {
   return 'Unable to search for users. Please try again.'
 }
 
-export default function NewChatDialog({ onClose, onSelectUser }: NewChatDialogProps) {
+export default function NewChatDialog({ onClose, onConversationCreated }: NewChatDialogProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<{ query: string; users: UserSearchResult[] } | null>(null)
   const [searchError, setSearchError] = useState<{ query: string; message: string } | null>(null)
+  const [creatingUserId, setCreatingUserId] = useState<string | null>(null)
+  const [createError, setCreateError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -58,6 +61,18 @@ export default function NewChatDialog({ onClose, onSelectUser }: NewChatDialogPr
   const currentResults = results?.query === searchTerm ? results.users : []
   const currentError = searchError?.query === searchTerm ? searchError.message : ''
   const loading = Boolean(searchTerm) && !currentError && results?.query !== searchTerm
+
+  async function handleSelectUser(user: UserSearchResult) {
+    setCreatingUserId(user.id)
+    setCreateError('')
+    try {
+      const conversation = await createDirectConversation(user.id)
+      onConversationCreated(conversation)
+    } catch (error: unknown) {
+      setCreateError(getErrorMessage(error))
+      setCreatingUserId(null)
+    }
+  }
 
   return (
     <div
@@ -100,7 +115,10 @@ export default function NewChatDialog({ onClose, onSelectUser }: NewChatDialogPr
               type="search"
               value={query}
               autoComplete="off"
-              onChange={(event) => setQuery(event.currentTarget.value)}
+              onChange={(event) => {
+                setQuery(event.currentTarget.value)
+                setCreateError('')
+              }}
               placeholder="Search by name, email, or phone"
               aria-label="Search by name, email, or phone"
               className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400"
@@ -109,6 +127,7 @@ export default function NewChatDialog({ onClose, onSelectUser }: NewChatDialogPr
         </div>
 
         <div className="min-h-36 flex-1 overflow-y-auto border-t border-gray-100 px-2 py-2">
+          {createError && <p role="alert" className="px-3 py-3 text-center text-sm text-rose-600">{createError}</p>}
           {loading ? (
             <p role="status" className="px-3 py-8 text-center text-sm text-gray-500">Searching…</p>
           ) : currentError ? (
@@ -119,13 +138,16 @@ export default function NewChatDialog({ onClose, onSelectUser }: NewChatDialogPr
                 <li key={user.id}>
                   <button
                     type="button"
-                    onClick={() => onSelectUser(user)}
+                    onClick={() => void handleSelectUser(user)}
+                    disabled={creatingUserId !== null}
                     className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[rgb(224,53,70)]"
                   >
                     <Avatar name={user.name} avatarUrl={user.avatarUrl ?? undefined} isOnline={user.isOnline} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-gray-800">{user.name}</span>
-                      <span className="mt-0.5 block truncate text-xs text-gray-500">{user.about || 'No status available'}</span>
+                      <span className="mt-0.5 block truncate text-xs text-gray-500">
+                        {creatingUserId === user.id ? 'Opening conversation…' : user.about || 'No status available'}
+                      </span>
                     </span>
                     {user.isOnline && <span className="text-xs text-emerald-600">Online</span>}
                   </button>

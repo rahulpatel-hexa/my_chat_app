@@ -27,7 +27,11 @@ export default function ChatHeader({ conversation }: { conversation: Conversatio
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold text-gray-900">{conversation.name}</h1>
           <p className="mt-0.5 text-xs text-gray-500">
-            {conversation.isOnline ? 'online' : formatLastSeen(conversation.lastMessageAt)}
+            {conversation.isOnline
+              ? 'online'
+              : conversation.lastSeen
+                ? formatLastSeen(conversation.lastSeen)
+                : 'offline'}
           </p>
         </div>
       </div>

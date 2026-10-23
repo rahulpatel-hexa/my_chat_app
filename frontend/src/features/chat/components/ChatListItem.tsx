@@ -9,6 +9,7 @@ type ChatListItemProps = {
 }
 
 function formatTime(value: string) {
+  if (!value) return ''
   const date = new Date(value)
   return date.toDateString() === new Date().toDateString()
     ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })

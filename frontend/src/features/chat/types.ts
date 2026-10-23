@@ -4,6 +4,7 @@ export type Conversation = {
   avatarUrl?: string
   lastMessage: string
   lastMessageAt: string
+  lastSeen?: string | null
   unreadCount: number
   isOnline: boolean
 }

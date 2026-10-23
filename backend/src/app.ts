@@ -3,6 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { uploadsDirectory } from "./middlewares/uploadAvatar";
 import authRoutes from "./modules/auth/auth.routes"
+import chatRoutes from "./modules/chat/chat.routes";
 import usersRoutes from "./modules/users/users.routes";
 import { errorHandler } from "./middlewares/error";
 
@@ -14,6 +15,7 @@ app.use(cookieParser());
 app.use("/uploads", express.static(uploadsDirectory));
 
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/conversations", chatRoutes);
 app.use("/api/v1/users", usersRoutes);
 
 app.get("/", (_req, res) => {

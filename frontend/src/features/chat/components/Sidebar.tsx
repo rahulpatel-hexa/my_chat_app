@@ -1,21 +1,19 @@
 import { LogOut, MessageSquarePlus, MoreVertical, Search, UserRound } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { logoutAuthSession } from '@/features/auth/api/authApi'
 import { useAuthStore } from '@/features/auth/store/useAuthStore'
-import { conversations } from '../mock/chatData'
-import type { UserSearchResult } from '../api/usersApi'
-import type { Conversation } from '../types'
+import {
+  conversationsQueryKey,
+  toConversation,
+  type ConversationListItem,
+  useConversations,
+} from '../api/conversationsApi'
 import Avatar from './Avatar'
 import ChatListItem from './ChatListItem'
 import NewChatDialog from './NewChatDialog'
-
-type SidebarProps = {
-  conversations?: Conversation[]
-  loading?: boolean
-  onSelectUser?: (user: UserSearchResult) => void
-}
 
 function ChatListSkeleton() {
   return (
@@ -34,15 +32,19 @@ function ChatListSkeleton() {
   )
 }
 
-export default function Sidebar({
-  conversations: chatConversations = conversations,
-  loading = false,
-  onSelectUser,
-}: SidebarProps) {
+export default function Sidebar() {
   const { conversationId } = useParams()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const userId = user?.id ?? ''
+  const conversationsQuery = useConversations(userId)
+  const chatConversations = useMemo(
+    () => conversationsQuery.data?.map((item) => toConversation(item, userId)) ?? [],
+    [conversationsQuery.data, userId],
+  )
+  const loading = conversationsQuery.isLoading
   const [query, setQuery] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [newChatOpen, setNewChatOpen] = useState(false)
@@ -57,6 +59,15 @@ export default function Sidebar({
   }
 
   const closeNewChat = useCallback(() => setNewChatOpen(false), [])
+
+  function handleConversationCreated(conversation: ConversationListItem) {
+    queryClient.setQueryData<ConversationListItem[]>(conversationsQueryKey(userId), (current) => [
+      conversation,
+      ...(current ?? []).filter((item) => item.id !== conversation.id),
+    ])
+    closeNewChat()
+    navigate(`/chats/${conversation.id}`)
+  }
 
   async function handleLogout() {
     try {
@@ -142,6 +153,17 @@ export default function Sidebar({
         <nav aria-label="Conversations" className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {loading ? (
             <ChatListSkeleton />
+          ) : conversationsQuery.isError ? (
+            <div className="px-5 py-8 text-center">
+              <p className="text-sm text-rose-600">Unable to load conversations.</p>
+              <button
+                type="button"
+                onClick={() => void conversationsQuery.refetch()}
+                className="mt-2 text-sm font-medium text-gray-700 underline underline-offset-2"
+              >
+                Try again
+              </button>
+            </div>
           ) : filtered.length > 0 ? (
             filtered.map((conversation) => (
               <ChatListItem key={conversation.id} conversation={conversation} selected={conversation.id === conversationId} />
@@ -156,14 +178,7 @@ export default function Sidebar({
       {newChatOpen && (
         <NewChatDialog
           onClose={closeNewChat}
-          onSelectUser={(selectedUser) => {
-            closeNewChat()
-            if (onSelectUser) {
-              onSelectUser(selectedUser)
-            } else {
-              navigate('/chats', { state: { newChatUser: selectedUser } })
-            }
-          }}
+          onConversationCreated={handleConversationCreated}
         />
       )}
     </aside>
