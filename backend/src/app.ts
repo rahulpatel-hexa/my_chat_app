@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { frontendOrigin } from "./config/cors";
 import { uploadsDirectory } from "./middlewares/uploadAvatar";
 import authRoutes from "./modules/auth/auth.routes"
 import chatRoutes from "./modules/chat/chat.routes";
@@ -9,7 +10,7 @@ import { errorHandler } from "./middlewares/error";
 
 const app = express();
 
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+app.use(cors({ origin: frontendOrigin, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 app.use("/uploads", express.static(uploadsDirectory));

@@ -57,6 +57,7 @@ Example:
 
 ```env
 PORT=5000
+FRONTEND_URL=http://localhost:5173
 MONGODB_URI=your_mongodb_connection_string
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
@@ -98,7 +99,7 @@ Open the local URL shown in your terminal.
 - User authentication
 - Email OTP verification
 - Login and signup interface
-- Real-time messaging (planned or in development)
+- Socket.IO backend connection setup (real-time messaging events planned)
 - Responsive user interface
 
 *Features are being developed and may change as the project progresses.*
