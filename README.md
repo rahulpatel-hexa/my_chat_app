@@ -99,7 +99,7 @@ Open the local URL shown in your terminal.
 - User authentication
 - Email OTP verification
 - Login and signup interface
-- Socket.IO backend connection setup (real-time messaging events planned)
+- Real-time chat messages with Socket.IO
 - Responsive user interface
 
 *Features are being developed and may change as the project progresses.*
@@ -132,6 +132,8 @@ socket.on("message:new", (message) => {
 
 Messages created through `POST /api/v1/conversations/:id/messages` are saved
 first, then broadcast to the conversation room as `message:new`.
+The frontend uses `VITE_SOCKET_URL` when configured; otherwise it connects to
+the origin from `VITE_API_URL` (default `http://localhost:5000`).
 
 ## Environment Variables
 

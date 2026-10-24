@@ -89,6 +89,18 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
       },
     );
 
+    socket.on("conversation:leave", (payload: unknown) => {
+      const conversationId =
+        typeof payload === "object" && payload !== null && "conversationId" in payload
+          ? payload.conversationId
+          : undefined;
+      if (typeof conversationId !== "string" || !/^[0-9a-fA-F]{24}$/.test(conversationId)) {
+        return;
+      }
+
+      void socket.leave(getConversationRoom(conversationId));
+    });
+
     socket.on("disconnect", () => {
       console.log(`Socket disconnected: ${socket.id}`);
     });

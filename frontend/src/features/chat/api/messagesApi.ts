@@ -7,7 +7,7 @@ export type ConversationMessage = Message & {
   updatedAt: string
 }
 
-type MessagesPage = {
+export type MessagesPage = {
   messages: ConversationMessage[]
   nextCursor: string | null
 }
