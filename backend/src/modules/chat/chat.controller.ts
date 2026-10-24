@@ -3,6 +3,7 @@ import { AuthRequest } from "../../middlewares/auth";
 import { getPublicAvatarUrl } from "../../utils/avatarUrl";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
+import { getConversationRoom, getIO } from "../../sockets/socket";
 import {
     createConversationMessage,
     createOrGetDirectConversation,
@@ -81,18 +82,21 @@ export const createMessage = asyncHandler(async (req: Request, res: Response) =>
     }
 
     const message = await createConversationMessage(conversationId, senderId, req.body.text as string);
+    const messageResponse = {
+        id: String(message._id),
+        conversationId: String(message.conversationId),
+        senderId: String(message.senderId),
+        type: message.type,
+        text: message.text,
+        status: message.status,
+        createdAt: message.createdAt,
+        updatedAt: message.updatedAt,
+    };
+    getIO().to(getConversationRoom(String(message.conversationId))).emit("message:new", messageResponse);
+
     res.status(201).json({
         success: true,
-        message: {
-            id: String(message._id),
-            conversationId: String(message.conversationId),
-            senderId: String(message.senderId),
-            type: message.type,
-            text: message.text,
-            status: message.status,
-            createdAt: message.createdAt,
-            updatedAt: message.updatedAt,
-        },
+        message: messageResponse,
     });
 });
 

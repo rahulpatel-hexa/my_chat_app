@@ -4,10 +4,22 @@ import { Types } from "mongoose";
 import { env } from "../config/env";
 import { Session } from "../models/Session";
 
+export interface AccessTokenPayload {
+  sub: string;
+}
+
 export const signAccessToken = (userId: string): string =>
   jwt.sign({ sub: userId }, env.jwtAccessSecret, {
     expiresIn: env.accessTokenExpires as jwt.SignOptions["expiresIn"],
   });
+
+export const verifyAccessToken = (token: string): AccessTokenPayload => {
+  const payload = jwt.verify(token, env.jwtAccessSecret);
+  if (typeof payload === "string" || typeof payload.sub !== "string" || !payload.sub) {
+    throw new Error("Invalid access token payload.");
+  }
+  return { sub: payload.sub };
+};
 
 const hash = (value: string) => crypto.createHash("sha256").update(value).digest("hex");
 

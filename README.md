@@ -104,6 +104,35 @@ Open the local URL shown in your terminal.
 
 *Features are being developed and may change as the project progresses.*
 
+## Socket Authentication
+
+Socket.IO connections must include the current access token in the handshake:
+
+```ts
+io("http://localhost:5000", {
+  auth: { token: accessToken },
+});
+```
+
+The backend rejects connections with a missing, invalid, or expired token. The
+authenticated user ID is available on the server as `socket.data.userId`.
+
+Join a conversation room after opening that conversation. The backend verifies
+that the authenticated user is a participant before joining:
+
+```ts
+socket.emit("conversation:join", { conversationId }, (result) => {
+  if (!result.success) console.error(result.error);
+});
+
+socket.on("message:new", (message) => {
+  // Add the new message to the open conversation.
+});
+```
+
+Messages created through `POST /api/v1/conversations/:id/messages` are saved
+first, then broadcast to the conversation room as `message:new`.
+
 ## Environment Variables
 
 Never commit `.env` files, database credentials, email passwords, or secret
