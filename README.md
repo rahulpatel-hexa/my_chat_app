@@ -132,6 +132,10 @@ socket.on("message:new", (message) => {
 
 Messages created through `POST /api/v1/conversations/:id/messages` are saved
 first, then broadcast to the conversation room as `message:new`.
+When a conversation is opened or a new message arrives in the active chat, the
+backend marks the other participant's messages as read and broadcasts
+`message:read`. Contacts receive `presence:update` when a user comes online or
+goes offline.
 The frontend uses `VITE_SOCKET_URL` when configured; otherwise it connects to
 the origin from `VITE_API_URL` (default `http://localhost:5000`).
 

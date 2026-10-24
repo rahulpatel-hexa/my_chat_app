@@ -149,8 +149,26 @@ export const markConversationAsRead = async (conversationId: string, userId: str
         throw new ApiError(403, "You are not a participant in this conversation.");
     }
 
-    await Conversation.updateOne(
-        { _id: conversation._id },
-        { $set: { [`unreadCounts.${userId}`]: 0 } },
-    ).exec();
+    const unreadMessages = await Message.find({
+        conversationId: conversation._id,
+        senderId: { $ne: userId },
+        status: { $ne: "read" },
+        deletedFor: { $nin: [userId] },
+    })
+        .select("_id")
+        .exec();
+    const messageIds = unreadMessages.map((message) => String(message._id));
+
+    await Promise.all([
+        Message.updateMany(
+            { _id: { $in: unreadMessages.map((message) => message._id) } },
+            { $set: { status: "read" } },
+        ).exec(),
+        Conversation.updateOne(
+            { _id: conversation._id },
+            { $set: { [`unreadCounts.${userId}`]: 0 } },
+        ).exec(),
+    ]);
+
+    return messageIds;
 };

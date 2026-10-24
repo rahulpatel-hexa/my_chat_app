@@ -2,12 +2,30 @@ import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import { frontendOrigin } from "../config/cors";
 import { Conversation } from "../models/Conversation";
+import { User } from "../models/User";
 import { verifyAccessToken } from "../services/token.service";
 
 let io: Server | undefined;
+const connectedSocketsByUser = new Map<string, number>();
 
 export const getConversationRoom = (conversationId: string): string =>
   `conversation:${conversationId.toLowerCase()}`;
+
+const getUserRoom = (userId: string): string => `user:${userId}`;
+
+const broadcastPresence = async (userId: string, isOnline: boolean, lastSeen: Date | null) => {
+  if (!io) return;
+
+  const participantIds = await Conversation.distinct("participants", { participants: userId });
+  const recipientRooms = participantIds
+    .map(String)
+    .filter((participantId) => participantId !== userId)
+    .map(getUserRoom);
+
+  if (recipientRooms.length) {
+    io.to(recipientRooms).emit("presence:update", { userId, isOnline, lastSeen });
+  }
+};
 
 export const initializeSocket = (httpServer: HttpServer): Server => {
   io = new Server(httpServer, {
@@ -33,6 +51,18 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
   });
 
   io.on("connection", (socket) => {
+    const userId = String(socket.data.userId);
+    const existingConnections = connectedSocketsByUser.get(userId) ?? 0;
+    connectedSocketsByUser.set(userId, existingConnections + 1);
+    void socket.join(getUserRoom(userId));
+
+    if (existingConnections === 0) {
+      void User.updateOne({ _id: userId }, { $set: { isOnline: true } })
+        .exec()
+        .then(() => broadcastPresence(userId, true, null))
+        .catch((error: unknown) => console.error("Failed to set user online:", error));
+    }
+
     console.log(`Socket connected: ${socket.id}`);
 
     socket.on(
@@ -102,6 +132,27 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
     });
 
     socket.on("disconnect", () => {
+      const activeConnections = connectedSocketsByUser.get(userId) ?? 0;
+      if (activeConnections <= 1) {
+        connectedSocketsByUser.delete(userId);
+        const lastSeen = new Date();
+        void User.updateOne(
+          { _id: userId },
+          { $set: { isOnline: false, lastSeen } },
+        )
+          .exec()
+          .then(async () => {
+            if (connectedSocketsByUser.has(userId)) {
+              await User.updateOne({ _id: userId }, { $set: { isOnline: true } }).exec();
+              return;
+            }
+            await broadcastPresence(userId, false, lastSeen);
+          })
+          .catch((error: unknown) => console.error("Failed to set user offline:", error));
+      } else {
+        connectedSocketsByUser.set(userId, activeConnections - 1);
+      }
+
       console.log(`Socket disconnected: ${socket.id}`);
     });
   });

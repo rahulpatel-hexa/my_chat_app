@@ -148,6 +148,13 @@ export const markAsRead = asyncHandler(async (req: Request, res: Response) => {
         throw new ApiError(400, "A valid conversation ID is required.");
     }
 
-    await markConversationAsRead(conversationId, userId);
+    const messageIds = await markConversationAsRead(conversationId, userId);
+    if (messageIds.length) {
+        getIO().to(getConversationRoom(conversationId)).emit("message:read", {
+            conversationId,
+            messageIds,
+            readerId: userId,
+        });
+    }
     res.json({ success: true });
 });

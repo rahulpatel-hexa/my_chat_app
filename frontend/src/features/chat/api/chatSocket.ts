@@ -3,6 +3,16 @@ import type { ConversationMessage } from './messagesApi'
 
 type ServerToClientEvents = {
   'message:new': (message: ConversationMessage) => void
+  'message:read': (update: {
+    conversationId: string
+    messageIds: string[]
+    readerId: string
+  }) => void
+  'presence:update': (presence: {
+    userId: string
+    isOnline: boolean
+    lastSeen: string | null
+  }) => void
 }
 
 type ClientToServerEvents = {

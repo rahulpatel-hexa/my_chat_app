@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/features/auth/store/useAuthStore'
 import { createChatSocket, type ChatSocket } from '../api/chatSocket'
 import {
+  type ConversationListItem,
   conversationsQueryKey,
   toConversation,
   useConversations,
@@ -33,11 +34,16 @@ export default function ChatLayout() {
   const queryClient = useQueryClient()
   const socketRef = useRef<ChatSocket | null>(null)
   const connectionErrorShown = useRef(false)
+  const activeConversationIdRef = useRef(conversationId)
   const messagesQuery = useConversationMessages(conversationId ?? '')
   const selectedMessages = useMemo(
     () => messagesQuery.data?.pages.flatMap((page) => page.messages).reverse() ?? [],
     [messagesQuery.data],
   )
+
+  useEffect(() => {
+    activeConversationIdRef.current = conversationId
+  }, [conversationId])
 
   useEffect(() => {
     if (!accessToken) {
@@ -62,6 +68,76 @@ export default function ChatLayout() {
         },
       )
       void queryClient.invalidateQueries({ queryKey: conversationsQueryKey(userId) })
+
+      if (
+        message.senderId !== userId &&
+        activeConversationIdRef.current === message.conversationId
+      ) {
+        void markConversationRead(message.conversationId)
+          .then(() => {
+            queryClient.setQueryData<ConversationListItem[]>(
+              conversationsQueryKey(userId),
+              (current) =>
+                current?.map((conversation) =>
+                  conversation.id === message.conversationId
+                    ? { ...conversation, unreadCount: 0 }
+                    : conversation,
+                ),
+            )
+            void queryClient.invalidateQueries({
+              queryKey: conversationsQueryKey(userId),
+            })
+          })
+          .catch(() => {
+            toast.error('Unable to mark message as read', {
+              description: 'Please try again.',
+            })
+          })
+      }
+    }
+    const handleMessageRead = (update: {
+      conversationId: string
+      messageIds: string[]
+      readerId: string
+    }) => {
+      const readMessageIds = new Set(update.messageIds)
+      queryClient.setQueryData<InfiniteData<MessagesPage, string | null>>(
+        messagesQueryKey(update.conversationId),
+        (current) => {
+          if (!current) return current
+          return {
+            ...current,
+            pages: current.pages.map((page) => ({
+              ...page,
+              messages: page.messages.map((message) =>
+                readMessageIds.has(message.id) ? { ...message, status: 'read' } : message,
+              ),
+            })),
+          }
+        },
+      )
+    }
+    const handlePresenceUpdate = (presence: {
+      userId: string
+      isOnline: boolean
+      lastSeen: string | null
+    }) => {
+      queryClient.setQueryData<ConversationListItem[]>(
+        conversationsQueryKey(userId),
+        (current) =>
+          current?.map((conversation) =>
+            conversation.otherUser.id === presence.userId
+              ? {
+                  ...conversation,
+                  otherUser: {
+                    ...conversation.otherUser,
+                    isOnline: presence.isOnline,
+                    lastSeen: presence.lastSeen ?? conversation.otherUser.lastSeen,
+                  },
+                }
+              : conversation,
+          ),
+      )
     }
     const handleConnect = () => {
       connectionErrorShown.current = false
@@ -74,6 +150,8 @@ export default function ChatLayout() {
     }
 
     chatSocket.on('message:new', handleNewMessage)
+    chatSocket.on('message:read', handleMessageRead)
+    chatSocket.on('presence:update', handlePresenceUpdate)
     chatSocket.on('connect', handleConnect)
     chatSocket.on('connect_error', handleConnectError)
     socketRef.current = chatSocket
@@ -81,6 +159,8 @@ export default function ChatLayout() {
 
     return () => {
       chatSocket.off('message:new', handleNewMessage)
+      chatSocket.off('message:read', handleMessageRead)
+      chatSocket.off('presence:update', handlePresenceUpdate)
       chatSocket.off('connect', handleConnect)
       chatSocket.off('connect_error', handleConnectError)
       chatSocket.disconnect()
