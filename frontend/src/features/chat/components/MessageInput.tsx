@@ -1,14 +1,36 @@
 import { Send, Smile } from 'lucide-react'
-import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
 export default function MessageInput({
   onSend,
+  onTypingChange,
 }: {
   onSend: (text: string) => Promise<boolean>
+  onTypingChange: (isTyping: boolean) => void
 }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const onTypingChangeRef = useRef(onTypingChange)
+  const typingRef = useRef(false)
+  const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    onTypingChangeRef.current = onTypingChange
+  }, [onTypingChange])
+
+  function stopTyping() {
+    if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current)
+    if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current)
+    idleTimeoutRef.current = null
+    refreshIntervalRef.current = null
+    if (!typingRef.current) return
+    typingRef.current = false
+    onTypingChangeRef.current(false)
+  }
+
+  useEffect(() => stopTyping, [])
 
   async function sendMessage() {
     const message = text.trim()
@@ -18,6 +40,7 @@ export default function MessageInput({
       const sent = await onSend(message)
       if (sent) {
         setText('')
+        stopTyping()
         if (textareaRef.current) {
           textareaRef.current.style.height = '24px'
         }
@@ -41,6 +64,19 @@ export default function MessageInput({
 
   function handleChange(value: string) {
     setText(value)
+    if (value.trim()) {
+      if (!typingRef.current) {
+        typingRef.current = true
+        onTypingChangeRef.current(true)
+        refreshIntervalRef.current = setInterval(() => {
+          onTypingChangeRef.current(true)
+        }, 2000)
+      }
+      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current)
+      idleTimeoutRef.current = setTimeout(stopTyping, 1000)
+    } else {
+      stopTyping()
+    }
     const textarea = textareaRef.current
     if (!textarea) return
     textarea.style.height = '24px'

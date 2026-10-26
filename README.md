@@ -136,6 +136,11 @@ When a conversation is opened or a new message arrives in the active chat, the
 backend marks the other participant's messages as read and broadcasts
 `message:read`. Contacts receive `presence:update` when a user comes online or
 goes offline.
+Typing indicators use `typing:start` and `typing:stop` events with a
+`conversationId`; the backend broadcasts `typing:update` only to other sockets
+in that conversation. Clients should join the conversation before sending typing
+events. Typing state is cleared when the sender stops, leaves the conversation,
+or disconnects.
 The frontend uses `VITE_SOCKET_URL` when configured; otherwise it connects to
 the origin from `VITE_API_URL` (default `http://localhost:5000`).
 

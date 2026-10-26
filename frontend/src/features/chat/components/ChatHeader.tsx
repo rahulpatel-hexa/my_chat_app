@@ -12,7 +12,13 @@ function formatLastSeen(value: string) {
   return `Last seen ${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}`
 }
 
-export default function ChatHeader({ conversation }: { conversation: Conversation }) {
+export default function ChatHeader({
+  conversation,
+  isTyping = false,
+}: {
+  conversation: Conversation
+  isTyping?: boolean
+}) {
   return (
     <header className="flex h-[76px] shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 md:px-6">
       <div className="flex min-w-0 items-center gap-3">
@@ -26,8 +32,10 @@ export default function ChatHeader({ conversation }: { conversation: Conversatio
         <Avatar name={conversation.name} avatarUrl={conversation.avatarUrl} isOnline={conversation.isOnline} />
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold text-gray-900">{conversation.name}</h1>
-          <p className="mt-0.5 text-xs text-gray-500">
-            {conversation.isOnline
+          <p role="status" aria-live="polite" className="mt-0.5 text-xs text-gray-500">
+            {isTyping
+              ? 'typing...'
+              : conversation.isOnline
               ? 'online'
               : conversation.lastSeen
                 ? formatLastSeen(conversation.lastSeen)

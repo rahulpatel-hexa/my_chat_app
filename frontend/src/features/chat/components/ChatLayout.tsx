@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -35,6 +35,8 @@ export default function ChatLayout() {
   const socketRef = useRef<ChatSocket | null>(null)
   const connectionErrorShown = useRef(false)
   const activeConversationIdRef = useRef(conversationId)
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [typingConversationId, setTypingConversationId] = useState<string | null>(null)
   const messagesQuery = useConversationMessages(conversationId ?? '')
   const selectedMessages = useMemo(
     () => messagesQuery.data?.pages.flatMap((page) => page.messages).reverse() ?? [],
@@ -43,6 +45,7 @@ export default function ChatLayout() {
 
   useEffect(() => {
     activeConversationIdRef.current = conversationId
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
   }, [conversationId])
 
   useEffect(() => {
@@ -139,8 +142,33 @@ export default function ChatLayout() {
           ),
       )
     }
+    const handleTypingUpdate = (update: {
+      conversationId: string
+      userId: string
+      isTyping: boolean
+    }) => {
+      if (
+        update.userId === userId ||
+        activeConversationIdRef.current !== update.conversationId
+      ) {
+        return
+      }
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      setTypingConversationId(update.isTyping ? update.conversationId : null)
+      if (update.isTyping) {
+        typingTimeoutRef.current = setTimeout(() => {
+          setTypingConversationId(null)
+          typingTimeoutRef.current = null
+        }, 4000)
+      } else {
+        typingTimeoutRef.current = null
+      }
+    }
     const handleConnect = () => {
       connectionErrorShown.current = false
+      setTypingConversationId(null)
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     }
     const handleConnectError = (error: Error) => {
       console.error('Socket connection failed:', error.message)
@@ -152,6 +180,7 @@ export default function ChatLayout() {
     chatSocket.on('message:new', handleNewMessage)
     chatSocket.on('message:read', handleMessageRead)
     chatSocket.on('presence:update', handlePresenceUpdate)
+    chatSocket.on('typing:update', handleTypingUpdate)
     chatSocket.on('connect', handleConnect)
     chatSocket.on('connect_error', handleConnectError)
     socketRef.current = chatSocket
@@ -161,9 +190,11 @@ export default function ChatLayout() {
       chatSocket.off('message:new', handleNewMessage)
       chatSocket.off('message:read', handleMessageRead)
       chatSocket.off('presence:update', handlePresenceUpdate)
+      chatSocket.off('typing:update', handleTypingUpdate)
       chatSocket.off('connect', handleConnect)
       chatSocket.off('connect_error', handleConnectError)
       chatSocket.disconnect()
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
       if (socketRef.current === chatSocket) socketRef.current = null
     }
   }, [accessToken, queryClient, userId])
@@ -246,12 +277,22 @@ export default function ChatLayout() {
     }
   }
 
+  function handleTypingChange(isTyping: boolean) {
+    if (!selected || !socketRef.current?.connected) return
+    socketRef.current.emit(isTyping ? 'typing:start' : 'typing:stop', {
+      conversationId: selected.id,
+    })
+  }
+
   return (
     <main className="fixed inset-0 flex h-[100dvh] w-full overflow-hidden bg-white font-sans text-gray-800">
       <Sidebar />
       {selected ? (
         <section className={`${conversationId ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col bg-white`} aria-label={`Chat with ${selected.name}`}>
-          <ChatHeader conversation={selected} />
+          <ChatHeader
+            conversation={selected}
+            isTyping={typingConversationId === conversationId}
+          />
           <MessageList
             messages={selectedMessages}
             conversationId={selected.id}
@@ -263,7 +304,7 @@ export default function ChatLayout() {
             loadingMore={messagesQuery.isFetchingNextPage}
             onLoadMore={() => void messagesQuery.fetchNextPage()}
           />
-          <MessageInput onSend={handleSend} />
+          <MessageInput key={selected.id} onSend={handleSend} onTypingChange={handleTypingChange} />
         </section>
       ) : <EmptyState />}
     </main>

@@ -13,6 +13,11 @@ type ServerToClientEvents = {
     isOnline: boolean
     lastSeen: string | null
   }) => void
+  'typing:update': (update: {
+    conversationId: string
+    userId: string
+    isTyping: boolean
+  }) => void
 }
 
 type ClientToServerEvents = {
@@ -21,6 +26,8 @@ type ClientToServerEvents = {
     acknowledge: (response: { success: boolean; conversationId?: string; error?: string }) => void,
   ) => void
   'conversation:leave': (payload: { conversationId: string }) => void
+  'typing:start': (payload: { conversationId: string }) => void
+  'typing:stop': (payload: { conversationId: string }) => void
 }
 
 export type ChatSocket = Socket<ServerToClientEvents, ClientToServerEvents>

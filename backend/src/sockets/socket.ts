@@ -52,6 +52,7 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
 
   io.on("connection", (socket) => {
     const userId = String(socket.data.userId);
+    const typingConversationIds = new Set<string>();
     const existingConnections = connectedSocketsByUser.get(userId) ?? 0;
     connectedSocketsByUser.set(userId, existingConnections + 1);
     void socket.join(getUserRoom(userId));
@@ -119,6 +120,54 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
       },
     );
 
+    const stopTyping = (conversationId: string) => {
+      if (!typingConversationIds.delete(conversationId)) return;
+      socket.to(getConversationRoom(conversationId)).emit("typing:update", {
+        conversationId,
+        userId,
+        isTyping: false,
+      });
+    };
+
+    socket.on("typing:start", (payload: unknown) => {
+      const conversationId =
+        typeof payload === "object" && payload !== null && "conversationId" in payload
+          ? payload.conversationId
+          : undefined;
+      if (
+        typeof conversationId !== "string" ||
+        !/^[0-9a-fA-F]{24}$/.test(conversationId)
+      ) {
+        return;
+      }
+
+      const normalizedId = conversationId.toLowerCase();
+      const room = getConversationRoom(normalizedId);
+      if (!socket.rooms.has(room)) return;
+
+      typingConversationIds.add(normalizedId);
+      socket.to(room).emit("typing:update", {
+        conversationId: normalizedId,
+        userId,
+        isTyping: true,
+      });
+    });
+
+    socket.on("typing:stop", (payload: unknown) => {
+      const conversationId =
+        typeof payload === "object" && payload !== null && "conversationId" in payload
+          ? payload.conversationId
+          : undefined;
+      if (
+        typeof conversationId !== "string" ||
+        !/^[0-9a-fA-F]{24}$/.test(conversationId)
+      ) {
+        return;
+      }
+
+      stopTyping(conversationId.toLowerCase());
+    });
+
     socket.on("conversation:leave", (payload: unknown) => {
       const conversationId =
         typeof payload === "object" && payload !== null && "conversationId" in payload
@@ -128,7 +177,20 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
         return;
       }
 
-      void socket.leave(getConversationRoom(conversationId));
+      const normalizedId = conversationId.toLowerCase();
+      stopTyping(normalizedId);
+      void socket.leave(getConversationRoom(normalizedId));
+    });
+
+    socket.on("disconnecting", () => {
+      for (const conversationId of typingConversationIds) {
+        socket.to(getConversationRoom(conversationId)).emit("typing:update", {
+          conversationId,
+          userId,
+          isTyping: false,
+        });
+      }
+      typingConversationIds.clear();
     });
 
     socket.on("disconnect", () => {
